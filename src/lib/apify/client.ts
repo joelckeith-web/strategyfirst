@@ -6,6 +6,14 @@ import {
 
 const APIFY_API_BASE = 'https://api.apify.com/v2';
 
+/**
+ * Encode actor ID for use in URL path
+ * Actor IDs like "compass/crawler-google-places" need to become "compass~crawler-google-places"
+ */
+function encodeActorId(actorId: string): string {
+  return actorId.replace('/', '~');
+}
+
 class ApifyClient {
   private token: string;
 
@@ -42,7 +50,7 @@ class ApifyClient {
       queryParams.set('build', build);
     }
 
-    const url = `${APIFY_API_BASE}/acts/${actorId}/runs?${queryParams}`;
+    const url = `${APIFY_API_BASE}/acts/${encodeActorId(actorId)}/runs?${queryParams}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -73,7 +81,7 @@ class ApifyClient {
       waitForFinish: waitForFinish.toString(),
     });
 
-    const url = `${APIFY_API_BASE}/acts/${actorId}/run-sync-get-dataset-items?${queryParams}`;
+    const url = `${APIFY_API_BASE}/acts/${encodeActorId(actorId)}/run-sync-get-dataset-items?${queryParams}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -110,7 +118,7 @@ class ApifyClient {
    * Get the status of a run
    */
   async getRun(actorId: string, runId: string): Promise<ApifyRunResult> {
-    const url = `${APIFY_API_BASE}/acts/${actorId}/runs/${runId}`;
+    const url = `${APIFY_API_BASE}/acts/${encodeActorId(actorId)}/runs/${runId}`;
 
     const response = await fetch(url, {
       headers: this.getHeaders(),
@@ -186,7 +194,7 @@ class ApifyClient {
    * Abort a running actor
    */
   async abortRun(actorId: string, runId: string): Promise<void> {
-    const url = `${APIFY_API_BASE}/acts/${actorId}/runs/${runId}/abort`;
+    const url = `${APIFY_API_BASE}/acts/${encodeActorId(actorId)}/runs/${runId}/abort`;
 
     const response = await fetch(url, {
       method: 'POST',
