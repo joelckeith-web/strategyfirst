@@ -238,7 +238,7 @@ export default function ResearchResultsPage({
               </div>
               <div>
                 <p className="text-sm text-gray-500">Categories</p>
-                <p className="font-medium">{gbp.categories.join(', ')}</p>
+                <p className="font-medium">{gbp.categories?.join(', ') || 'N/A'}</p>
               </div>
               {gbp.phone && (
                 <div>
@@ -419,7 +419,7 @@ export default function ResearchResultsPage({
                   </p>
                 </div>
               </div>
-              {websiteCrawl.technologies.length > 0 && (
+              {websiteCrawl.technologies && websiteCrawl.technologies.length > 0 && (
                 <div>
                   <p className="text-sm text-gray-500 mb-2">Technologies</p>
                   <div className="flex flex-wrap gap-2">
@@ -431,7 +431,7 @@ export default function ResearchResultsPage({
                   </div>
                 </div>
               )}
-              {websiteCrawl.schemaTypes.length > 0 && (
+              {websiteCrawl.schemaTypes && websiteCrawl.schemaTypes.length > 0 && (
                 <div>
                   <p className="text-sm text-gray-500 mb-2">Schema Types</p>
                   <div className="flex flex-wrap gap-2">
@@ -455,10 +455,10 @@ export default function ResearchResultsPage({
             </CardHeader>
             <CardBody>
               <div className="grid grid-cols-2 gap-4">
-                <StatCard value={sitemap.totalPages} label="Total Pages" icon="📄" />
-                <StatCard value={sitemap.pageTypes.services || 0} label="Service Pages" icon="🔧" />
-                <StatCard value={sitemap.pageTypes.blog || 0} label="Blog Posts" icon="📝" />
-                <StatCard value={sitemap.recentlyUpdated} label="Recently Updated" icon="🔄" />
+                <StatCard value={sitemap.totalPages || 0} label="Total Pages" icon="📄" />
+                <StatCard value={sitemap.pageTypes?.services || 0} label="Service Pages" icon="🔧" />
+                <StatCard value={sitemap.pageTypes?.blog || 0} label="Blog Posts" icon="📝" />
+                <StatCard value={sitemap.recentlyUpdated || 0} label="Recently Updated" icon="🔄" />
               </div>
               <div className="mt-4 space-y-2">
                 <div className="flex items-center justify-between text-sm">
