@@ -333,12 +333,12 @@ async function triggerApifyResearch(
         mobileResponsive: true, // Assume true for now - would need more analysis
         structuredData: hasStructuredData,
         schemaTypes,
-        title: homePage?.metadata?.title || input.businessName,
+        title: homePage?.title || input.businessName,
         description: homePage?.metadata?.description || '',
         totalPages: crawlResult.totalPages,
         pages: crawlResult.pages.slice(0, 10).map(p => ({
           url: p.url,
-          title: p.metadata?.title || '',
+          title: p.title || '',
           description: p.metadata?.description || '',
         })),
       };
