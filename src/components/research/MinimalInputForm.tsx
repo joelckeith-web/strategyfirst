@@ -151,18 +151,18 @@ export function MinimalInputForm() {
 
           <div>
             <label htmlFor="gbpUrl" className="block text-sm font-medium text-gray-700 mb-1">
-              Google Business Profile URL
+              Google Maps URL
               <span className="text-gray-400 font-normal ml-1">(optional)</span>
             </label>
             <Input
               id="gbpUrl"
               type="url"
-              placeholder="https://maps.google.com/..."
+              placeholder="https://www.google.com/maps/place/..."
               value={formData.gbpUrl}
               onChange={handleChange('gbpUrl')}
             />
             <p className="mt-1 text-xs text-gray-500">
-              If you don&apos;t have this, we&apos;ll try to find it automatically
+              Paste your Google Maps listing URL for more accurate data
             </p>
           </div>
 
