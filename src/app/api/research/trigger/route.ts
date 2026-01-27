@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { supabaseAdmin } from '@/lib/supabase/client';
 import type { ResearchSessionInsert, Json } from '@/lib/supabase/types';
 import {
@@ -139,10 +140,12 @@ export async function POST(request: NextRequest) {
         } as never)
         .eq('id', sessionId);
 
-      // Trigger Apify research asynchronously (don't await)
-      triggerApifyResearch(sessionId, inputData).catch(err => {
-        console.error('Apify research failed:', err);
-      });
+      // Use waitUntil to keep the serverless function alive while Apify runs
+      waitUntil(
+        triggerApifyResearch(sessionId, inputData).catch(err => {
+          console.error('Apify research failed:', err);
+        })
+      );
     } else {
       // No Apify configured - use fallback mock data
       console.log('No APIFY_API_TOKEN configured, using fallback mock data');
