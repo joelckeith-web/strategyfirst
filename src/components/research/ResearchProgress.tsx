@@ -37,42 +37,49 @@ interface ResearchProgressProps {
   onComplete?: (results: Record<string, unknown>) => void;
 }
 
+// Task display order: GBP + Sitemap (parallel), then Competitors, Website, SEO, Citations
 const TASK_INFO = {
   gbp: {
     label: 'Google Business Profile',
     description: 'Fetching rating, reviews, categories, and contact info',
     icon: '📍',
     resultKey: 'gbp',
-  },
-  competitors: {
-    label: 'Competitor Research',
-    description: 'Finding and analyzing top local competitors',
-    icon: '🏆',
-    resultKey: 'competitors',
-  },
-  website: {
-    label: 'Website Crawl',
-    description: 'Detecting CMS, SSL, schema, and technical details',
-    icon: '🌐',
-    resultKey: 'websiteCrawl',
+    order: 1,
   },
   sitemap: {
     label: 'Sitemap Analysis',
     description: 'Analyzing page structure, blog, and service pages',
     icon: '🗺️',
     resultKey: 'sitemap',
+    order: 2,
+  },
+  competitors: {
+    label: 'Competitor Research',
+    description: 'Finding and analyzing top local competitors',
+    icon: '🏆',
+    resultKey: 'competitors',
+    order: 3,
+  },
+  website: {
+    label: 'Website Crawl',
+    description: 'Detecting CMS, SSL, schema, and technical details',
+    icon: '🌐',
+    resultKey: 'websiteCrawl',
+    order: 4,
   },
   seo: {
     label: 'SEO Audit',
     description: 'Analyzing performance, mobile friendliness, and technical SEO',
     icon: '📊',
     resultKey: 'seoAudit',
+    order: 5,
   },
   citations: {
     label: 'Citation Check',
     description: 'Checking business listings and NAP consistency',
     icon: '📋',
     resultKey: 'citations',
+    order: 6,
   },
 };
 
@@ -288,7 +295,10 @@ export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProp
     );
   }
 
-  const taskKeys = Object.keys(TASK_INFO) as Array<keyof typeof TASK_INFO>;
+  // Sort tasks by display order
+  const taskKeys = (Object.keys(TASK_INFO) as Array<keyof typeof TASK_INFO>).sort(
+    (a, b) => TASK_INFO[a].order - TASK_INFO[b].order
+  );
   const totalTasks = taskKeys.length;
   const completedCount = getCompletedCount();
 

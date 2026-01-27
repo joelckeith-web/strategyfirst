@@ -75,11 +75,15 @@ class ApifyClient {
     input: TInput,
     options: ApifyActorCallOptions = {}
   ): Promise<{ run: ApifyRunResult; items: TOutput[] }> {
-    const { waitForFinish = 300 } = options;
+    const { waitForFinish = 300, memory = 8192, timeout = 300 } = options;
 
     const queryParams = new URLSearchParams({
       waitForFinish: waitForFinish.toString(),
+      memory: memory.toString(),
+      timeout: timeout.toString(),
     });
+
+    console.log(`Calling actor ${actorId} with memory=${memory}MB, timeout=${timeout}s, waitForFinish=${waitForFinish}s`);
 
     const url = `${APIFY_API_BASE}/acts/${encodeActorId(actorId)}/run-sync-get-dataset-items?${queryParams}`;
 
