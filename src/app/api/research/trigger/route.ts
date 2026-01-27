@@ -181,7 +181,12 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Run research using direct Apify API calls - ALL ACTORS RUN IN PARALLEL
+ * Run research using direct Apify API calls
+ *
+ * EXECUTION ORDER:
+ * Phase 1: GBP + Sitemap (parallel) - lightweight, fast
+ * Phase 2: Competitors (needs GBP category for accurate results)
+ * Phase 3: Website Crawler (32GB RAM, runs alone as heaviest task)
  */
 async function triggerApifyResearch(
   sessionId: string,
@@ -201,22 +206,27 @@ async function triggerApifyResearch(
 
   const location = [input.city, input.state].filter(Boolean).join(', ') || 'United States';
 
-  // Update progress to show parallel execution
+  console.log(`Starting phased Apify research for session ${sessionId}`);
+
+  // ============================================================
+  // PHASE 1: GBP + Sitemap (parallel) - Get business category first
+  // ============================================================
   await supabaseAdmin
     .from('research_sessions')
     .update({
       progress: {
-        currentStep: 'parallel_research',
+        currentStep: 'gbp',
         completedSteps: [],
         failedSteps: [],
-        percentage: 10,
+        percentage: 5,
+        phase: 'Phase 1: Fetching business profile and sitemap',
       },
     } as never)
     .eq('id', sessionId);
 
-  console.log(`Starting parallel Apify research for session ${sessionId}`);
+  console.log('Phase 1: Running GBP + Sitemap in parallel...');
 
-  // Define all research tasks to run in parallel
+  // GBP Task
   const gbpTask = async () => {
     try {
       let gbpResult;
@@ -244,6 +254,8 @@ async function triggerApifyResearch(
             responseRate: metrics.responseRate,
             recentReviews: metrics.recentReviews,
           },
+          // Pass the raw category for competitor search
+          categoryName: place.categoryName,
         };
       }
       return { success: false, error: gbpResult.error || 'No GBP data found' };
@@ -253,13 +265,115 @@ async function triggerApifyResearch(
     }
   };
 
+  // Sitemap Task
+  const sitemapTask = async () => {
+    try {
+      const sitemapResult = await extractSitemap(input.website);
+
+      if (sitemapResult.success && sitemapResult.urls.length > 0) {
+        const analysis = analyzeSitemapStructure(sitemapResult.urls);
+        return {
+          success: true,
+          data: {
+            totalPages: analysis.totalPages,
+            pageTypes: analysis.pageTypes,
+            hasServicePages: analysis.hasServicePages,
+            hasBlog: analysis.hasBlog,
+            hasLocationPages: analysis.hasLocationPages,
+            recentlyUpdated: analysis.recentlyUpdated,
+            urls: sitemapResult.urls.slice(0, 50).map(u => u.url),
+          },
+        };
+      }
+      // No sitemap is okay - return empty data
+      return {
+        success: true,
+        data: {
+          totalPages: 0,
+          pageTypes: {},
+          hasServicePages: false,
+          hasBlog: false,
+          hasLocationPages: false,
+          recentlyUpdated: 0,
+          error: 'No sitemap found',
+        },
+      };
+    } catch (err) {
+      console.error('Sitemap extraction failed:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  };
+
+  // Run Phase 1
+  const [gbpRes, sitemapRes] = await Promise.all([gbpTask(), sitemapTask()]);
+
+  // Process GBP results
+  if (gbpRes.success && gbpRes.data) {
+    accumulatedResults.gbp = gbpRes.data;
+    completedSteps.push('gbp');
+  } else {
+    failedSteps.push('gbp');
+    errors.push({ step: 'gbp', code: 'ERROR', message: gbpRes.error || 'Unknown error' });
+  }
+
+  // Process sitemap results
+  if (sitemapRes.success) {
+    accumulatedResults.sitemap = sitemapRes.data;
+    completedSteps.push('sitemap');
+  } else {
+    failedSteps.push('sitemap');
+    errors.push({ step: 'sitemap', code: 'ERROR', message: sitemapRes.error || 'Unknown error' });
+  }
+
+  // Update progress after Phase 1
+  await supabaseAdmin
+    .from('research_sessions')
+    .update({
+      results: accumulatedResults,
+      progress: {
+        currentStep: 'competitors',
+        completedSteps,
+        failedSteps,
+        percentage: 30,
+        phase: 'Phase 2: Finding competitors',
+      },
+    } as never)
+    .eq('id', sessionId);
+
+  // ============================================================
+  // PHASE 2: Competitor Search (uses GBP category for accuracy)
+  // ============================================================
+  console.log('Phase 2: Running competitor search...');
+
+  // Determine the best search query for competitors
+  // Priority: GBP category > user-provided industry > fallback
+  let competitorSearchQuery = 'local business';
+
+  if (gbpRes.success && gbpRes.categoryName) {
+    // Use the actual GBP category (e.g., "Home Inspector", "Plumber", "Restaurant")
+    competitorSearchQuery = gbpRes.categoryName;
+    console.log(`Using GBP category for competitor search: "${competitorSearchQuery}"`);
+  } else if (input.industry) {
+    competitorSearchQuery = input.industry;
+    console.log(`Using provided industry for competitor search: "${competitorSearchQuery}"`);
+  } else {
+    console.log('No category found, using generic search');
+  }
+
   const competitorTask = async () => {
     try {
-      const searchQuery = input.industry || input.businessName.split(' ').slice(-1)[0] || 'services';
-      const competitorResult = await findCompetitors(searchQuery, location, 5);
+      const competitorResult = await findCompetitors(competitorSearchQuery, location, 5);
 
       if (competitorResult.success && competitorResult.places.length > 0) {
-        const competitors = competitorResult.places.map((place, index) => {
+        // Filter out the user's own business from competitors
+        const filteredPlaces = competitorResult.places.filter(place => {
+          const placeName = place.title?.toLowerCase() || '';
+          const businessName = input.businessName.toLowerCase();
+          // Exclude if names are very similar
+          return !placeName.includes(businessName) && !businessName.includes(placeName);
+        });
+
+        const competitors = filteredPlaces.slice(0, 5).map((place, index) => {
           const metrics = extractGbpMetrics(place);
           return {
             rank: index + 1,
@@ -282,9 +396,41 @@ async function triggerApifyResearch(
     }
   };
 
+  const competitorRes = await competitorTask();
+
+  // Process competitor results
+  if (competitorRes.success) {
+    accumulatedResults.competitors = competitorRes.data;
+    completedSteps.push('competitors');
+  } else {
+    failedSteps.push('competitors');
+    errors.push({ step: 'competitors', code: 'ERROR', message: competitorRes.error || 'Unknown error' });
+  }
+
+  // Update progress after Phase 2
+  await supabaseAdmin
+    .from('research_sessions')
+    .update({
+      results: accumulatedResults,
+      progress: {
+        currentStep: 'website',
+        completedSteps,
+        failedSteps,
+        percentage: 50,
+        phase: 'Phase 3: Deep website crawl (this may take a moment)',
+      },
+    } as never)
+    .eq('id', sessionId);
+
+  // ============================================================
+  // PHASE 3: Website Crawler (32GB RAM, runs alone)
+  // ============================================================
+  console.log('Phase 3: Running website crawler with 32GB RAM...');
+
   const websiteTask = async () => {
     try {
-      const crawlResult = await crawlWebsite(input.website, { maxPages: 20, maxDepth: 3 });
+      // Use maximum memory for the heavy website crawl
+      const crawlResult = await crawlWebsite(input.website, { maxPages: 30, maxDepth: 3 });
 
       if (crawlResult.success && crawlResult.pages.length > 0) {
         const homePage = crawlResult.pages.find(p => {
@@ -336,70 +482,7 @@ async function triggerApifyResearch(
     }
   };
 
-  const sitemapTask = async () => {
-    try {
-      const sitemapResult = await extractSitemap(input.website);
-
-      if (sitemapResult.success && sitemapResult.urls.length > 0) {
-        const analysis = analyzeSitemapStructure(sitemapResult.urls);
-        return {
-          success: true,
-          data: {
-            totalPages: analysis.totalPages,
-            pageTypes: analysis.pageTypes,
-            hasServicePages: analysis.hasServicePages,
-            hasBlog: analysis.hasBlog,
-            hasLocationPages: analysis.hasLocationPages,
-            recentlyUpdated: analysis.recentlyUpdated,
-            urls: sitemapResult.urls.slice(0, 50).map(u => u.url),
-          },
-        };
-      }
-      // No sitemap is okay - return empty data
-      return {
-        success: true,
-        data: {
-          totalPages: 0,
-          pageTypes: {},
-          hasServicePages: false,
-          hasBlog: false,
-          hasLocationPages: false,
-          recentlyUpdated: 0,
-          error: 'No sitemap found',
-        },
-      };
-    } catch (err) {
-      console.error('Sitemap extraction failed:', err);
-      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
-    }
-  };
-
-  // Run ALL tasks in parallel for maximum speed
-  console.log('Running all Apify actors in parallel...');
-  const [gbpRes, competitorRes, websiteRes, sitemapRes] = await Promise.all([
-    gbpTask(),
-    competitorTask(),
-    websiteTask(),
-    sitemapTask(),
-  ]);
-
-  // Process GBP results
-  if (gbpRes.success) {
-    accumulatedResults.gbp = gbpRes.data;
-    completedSteps.push('gbp');
-  } else {
-    failedSteps.push('gbp');
-    errors.push({ step: 'gbp', code: 'ERROR', message: gbpRes.error || 'Unknown error' });
-  }
-
-  // Process competitor results
-  if (competitorRes.success) {
-    accumulatedResults.competitors = competitorRes.data;
-    completedSteps.push('competitors');
-  } else {
-    failedSteps.push('competitors');
-    errors.push({ step: 'competitors', code: 'ERROR', message: competitorRes.error || 'Unknown error' });
-  }
+  const websiteRes = await websiteTask();
 
   // Process website results
   if (websiteRes.success) {
@@ -408,15 +491,6 @@ async function triggerApifyResearch(
   } else {
     failedSteps.push('website');
     errors.push({ step: 'website', code: 'ERROR', message: websiteRes.error || 'Unknown error' });
-  }
-
-  // Process sitemap results
-  if (sitemapRes.success) {
-    accumulatedResults.sitemap = sitemapRes.data;
-    completedSteps.push('sitemap');
-  } else {
-    failedSteps.push('sitemap');
-    errors.push({ step: 'sitemap', code: 'ERROR', message: sitemapRes.error || 'Unknown error' });
   }
 
   // Generate SEO audit from collected data

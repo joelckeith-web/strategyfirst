@@ -12,6 +12,7 @@ interface ResearchProgressData {
   completedSteps: string[];
   failedSteps: string[];
   percentage: number;
+  phase?: string;
 }
 
 interface ResearchSessionStatus {
@@ -156,7 +157,7 @@ export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProp
   const getTaskStatus = useCallback((taskKey: keyof typeof TASK_INFO): TaskStatus => {
     if (!sessionStatus) return 'pending';
 
-    const { progress, results } = sessionStatus;
+    const { progress, results, status } = sessionStatus;
     const info = TASK_INFO[taskKey];
 
     // Check if failed
@@ -169,9 +170,25 @@ export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProp
       return 'completed';
     }
 
-    // Check if currently running
-    if (progress.currentStep === taskKey) {
-      return 'running';
+    // Check if currently running - handle phased execution
+    // Phase 1 runs gbp + sitemap in parallel
+    // Phase 2 runs competitors
+    // Phase 3 runs website
+    if (status === 'running') {
+      const currentStep = progress.currentStep;
+
+      // Direct match
+      if (currentStep === taskKey) {
+        return 'running';
+      }
+
+      // Phase 1: gbp and sitemap run together
+      if (currentStep === 'gbp' && taskKey === 'sitemap') {
+        return 'running';
+      }
+      if (currentStep === 'sitemap' && taskKey === 'gbp') {
+        return 'running';
+      }
     }
 
     return 'pending';
@@ -285,7 +302,7 @@ export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProp
             </h2>
             <p className="text-sm text-gray-600 mt-1">
               {sessionStatus?.status === 'running'
-                ? 'Gathering data from multiple sources...'
+                ? sessionStatus?.progress?.phase || 'Gathering data from multiple sources...'
                 : sessionStatus?.status === 'completed'
                 ? 'All research tasks completed!'
                 : sessionStatus?.status === 'failed'
