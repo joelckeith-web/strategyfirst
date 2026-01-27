@@ -1,36 +1,119 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Strategy First - Competitor Analysis Platform
 
-## Getting Started
+Automated research-first approach to local business competitive analysis. Instead of a 68-question intake form, users enter 4 fields and we auto-populate the rest via research.
 
-First, run the development server:
+**Live URL:** https://v0-strategy-first.vercel.app/
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Architecture
+
+```
+User Input (4 fields) → n8n Webhook → Apify Actors → Callback → Results Display
+        ↓                    ↓              ↓            ↓           ↓
+   businessName         research-trigger  GBP/Website  /api/callback  /research/[id]/results
+   website              Supabase          Sitemap/SEO  Supabase
+   city/state                             Competitors
+   industry
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Frontend:** Next.js 16 (App Router), React 19, Tailwind CSS
+- **Database:** Supabase (PostgreSQL + Realtime)
+- **Automation:** n8n Cloud (webhook orchestration)
+- **Data Sources:** Apify actors (Google Places, Website Crawler, Sitemap Sniffer)
+- **Deployment:** Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Quick Start
 
-## Learn More
+```bash
+# Install dependencies
+npm install
 
-To learn more about Next.js, take a look at the following resources:
+# Set up environment variables
+cp .env.example .env.local
+# Edit .env.local with your credentials
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Run development server
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Environment Variables
 
-## Deploy on Vercel
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key |
+| `NEXT_PUBLIC_APP_URL` | App URL (for callbacks) |
+| `N8N_WEBHOOK_URL` | n8n webhook trigger URL |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Database Setup
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Run migrations in Supabase SQL Editor:
+
+```bash
+# 1. Initial schema (clients, research_results, analyses)
+supabase/migrations/001_initial_schema.sql
+
+# 2. Research sessions table
+supabase/migrations/002_research_sessions.sql
+```
+
+## API Routes
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/api/research/trigger` | POST | Start new research session |
+| `/api/research/status/[sessionId]` | GET | Get session status & results |
+| `/api/research/callback` | POST | Receive n8n/Apify results |
+
+## Research Flow
+
+1. **Trigger** - User submits minimal form, creates session in Supabase, triggers n8n webhook
+2. **Research** - n8n runs parallel Apify actors (GBP, competitors, website, sitemap, SEO, citations)
+3. **Callback** - Results sent back to `/api/research/callback`, stored in Supabase
+4. **Display** - Frontend polls status, shows progress, displays results when complete
+
+## Project Structure
+
+```
+src/
+├── app/
+│   ├── api/research/        # API routes
+│   ├── research/            # Research pages
+│   │   ├── page.tsx         # New research form
+│   │   └── [id]/
+│   │       ├── page.tsx     # Progress view
+│   │       └── results/     # Results display
+├── components/
+│   ├── research/            # Research-specific components
+│   └── results/             # Results display components
+├── lib/
+│   ├── supabase/            # Supabase client & types
+│   └── transformers/        # Apify → App type transformers
+├── types/
+│   └── apify-outputs.ts     # Apify actor output types
+└── hooks/
+    └── useResearch.ts       # Research state hook
+```
+
+## Documentation
+
+- [Database Schema](docs/DATABASE.md)
+- [n8n Workflow](docs/n8n-workflow.md)
+- [Session Log](docs/SESSION_LOG.md)
+
+## Development
+
+```bash
+# Run dev server
+npm run dev
+
+# Type check
+npm run lint
+
+# Build for production
+npm run build
+
+# Deploy to Vercel
+vercel --prod
+```

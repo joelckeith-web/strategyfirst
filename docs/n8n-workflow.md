@@ -4,6 +4,14 @@
 
 This n8n workflow receives research requests from the Strategy First app, runs parallel research tasks using Apify actors, and sends results back via callbacks.
 
+## Production URLs
+
+| Service | URL |
+|---------|-----|
+| **n8n Instance** | https://aspos.app.n8n.cloud |
+| **Webhook Trigger** | https://aspos.app.n8n.cloud/webhook/research-trigger |
+| **App Callback** | https://v0-strategy-first.vercel.app/api/research/callback |
+
 ## Flow Diagram
 
 ```
