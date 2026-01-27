@@ -9,40 +9,68 @@ Strategy First is a competitor analysis platform for local businesses. It uses a
 - **Production:** https://v0-strategy-first.vercel.app/
 - **GitHub:** https://github.com/joelckeith-web/strategyfirst
 - **Supabase:** https://hwawccntztjfqacigkzg.supabase.co
-- **n8n:** https://aspos.app.n8n.cloud
 
 ## Tech Stack
 
 - Next.js 16 (App Router) + React 19
 - Supabase (PostgreSQL + Realtime subscriptions)
-- n8n Cloud (webhook orchestration)
-- Apify (data scraping actors)
-- Vercel (deployment)
+- **Apify (direct API integration)** - data scraping actors
+- Vercel (deployment) with `@vercel/functions` for background tasks
 - TypeScript (strict mode)
 
-## Architecture
+## Current Architecture (Updated Jan 2025)
 
 ```
 /research → MinimalInputForm (4 fields)
     ↓
 POST /api/research/trigger
     ↓
-Creates session in Supabase → Triggers n8n webhook
+Creates session in Supabase (status: pending)
     ↓
-n8n runs Apify actors (parallel):
-  - Google Places (GBP data)
-  - Website Crawler
-  - Sitemap Sniffer
-  - Competitor search
+Direct Apify Integration (3 phases):
     ↓
-n8n POSTs to /api/research/callback
+Phase 1: GBP + Sitemap (parallel, 8GB each)
+  - Google Places actor (gets business category)
+  - Sitemap Extractor actor
+    ↓
+Phase 2: Competitor Search (uses GBP category)
+  - Searches for competitors by actual business category
+  - NOT by business name keywords
+    ↓
+Phase 3: Website Crawler (32GB RAM, runs alone)
+  - Deep website crawl with max memory
     ↓
 Results stored in Supabase research_sessions table
     ↓
-/research/[id] polls status, shows progress
+/research/[id] polls status, shows progress with task cards
     ↓
 /research/[id]/results displays findings
 ```
+
+## Recent Changes (Jan 27, 2025)
+
+### Direct Apify Integration (replaced n8n)
+- Removed n8n webhook dependency
+- Uses `@vercel/functions` `waitUntil()` for background processing
+- 3-phase execution for optimal resource usage
+
+### Memory Allocation
+- Website Crawler: **32GB RAM** (32768 MB) - heaviest task
+- Other actors: **8GB RAM** (8192 MB)
+- Fixed bug where `callActor()` wasn't passing memory parameter to API
+
+### Competitor Search Fix
+- Now uses **GBP category** (e.g., "Home Inspector") for competitor search
+- Previously was incorrectly using last word of business name (e.g., "Services")
+- Filters out user's own business from competitor results
+
+### Task Display Order
+1. Google Business Profile (parallel with Sitemap)
+2. Sitemap Analysis (parallel with GBP)
+3. Competitor Research
+4. Website Crawl
+5. SEO Audit
+6. Citation Check
 
 ## Database Tables
 
@@ -64,50 +92,37 @@ Results stored in Supabase research_sessions table
 
 | File | Purpose |
 |------|---------|
-| `src/app/api/research/trigger/route.ts` | Starts research, triggers n8n |
-| `src/app/api/research/callback/route.ts` | Receives results from n8n |
-| `src/app/api/research/status/[sessionId]/route.ts` | Returns session status |
-| `src/components/research/ResearchProgress.tsx` | Progress UI with task cards |
+| `src/app/api/research/trigger/route.ts` | Starts research, runs 3-phase Apify execution |
+| `src/app/api/research/status/[sessionId]/route.ts` | Returns session status for polling |
+| `src/components/research/ResearchProgress.tsx` | Progress UI with 6 task cards |
+| `src/components/research/MinimalInputForm.tsx` | 4-field intake form |
 | `src/app/research/[id]/results/page.tsx` | Results display page |
-| `src/types/apify-outputs.ts` | Apify actor output types |
+| `src/lib/apify/client.ts` | Apify API client with memory settings |
+| `src/services/apify/googlePlaces.ts` | Google Places actor service |
+| `src/services/apify/websiteCrawler.ts` | Website crawler (32GB) |
+| `src/services/apify/sitemapExtractor.ts` | Sitemap extraction |
 | `src/lib/transformers/apify-to-research.ts` | Apify → app type transformers |
 
-## n8n Integration
+## Apify Integration
 
-**Webhook URL:** `https://aspos.app.n8n.cloud/webhook/research-trigger`
+**Direct API calls** (no n8n middleware):
+- Actor IDs use `~` separator in URLs (e.g., `compass~crawler-google-places`)
+- Memory and timeout passed as query params
+- Uses `run-sync-get-dataset-items` endpoint for synchronous execution
 
-**Callback URL:** `https://v0-strategy-first.vercel.app/api/research/callback`
-
-**Payload to n8n:**
-```json
-{
-  "sessionId": "uuid",
-  "businessName": "string",
-  "website": "string",
-  "city": "string",
-  "state": "string",
-  "callbackUrl": "string"
-}
-```
-
-**Callback from n8n:**
-```json
-{
-  "sessionId": "uuid",
-  "status": "completed",
-  "apifyResults": {
-    "googlePlaces": [...],
-    "websiteCrawler": [...],
-    "sitemapSniffer": [...]
-  }
-}
-```
+**Actors Used:**
+| Actor | ID | Memory |
+|-------|-----|--------|
+| Google Places | `compass/crawler-google-places` | 8GB |
+| Website Crawler | `apify/website-content-crawler` | 32GB |
+| Sitemap Extractor | `onescales/sitemap-url-extractor` | 8GB |
 
 ## Development Notes
 
-- Fallback research runs when n8n is unavailable (generates mock data)
-- Supabase realtime subscriptions available but polling is primary
-- Results page handles all 6 research types: gbp, competitors, website, sitemap, seo, citations
+- Fallback mock data runs when `APIFY_API_TOKEN` not configured
+- Uses `waitUntil()` from `@vercel/functions` for background processing
+- Results page handles 6 research types: gbp, competitors, website, sitemap, seo, citations
+- Supabase RLS disabled on research_sessions table for now
 
 ## Common Tasks
 
@@ -131,5 +146,12 @@ node scripts/test-full-flow.mjs
 Required in `.env.local` and Vercel:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `NEXT_PUBLIC_APP_URL`
-- `N8N_WEBHOOK_URL`
+- `SUPABASE_SERVICE_ROLE_KEY` (for admin operations)
+- `APIFY_API_TOKEN` (for direct Apify integration)
+
+## Future Expansion
+
+See `docs/STRATEGIC_INTAKE_EXPANSION.md` for planned Phase 2:
+- AI Analysis (Claude API) after scraping
+- Smart Verification Form with pre-filled data
+- Strategic Report generation answering all 41 intake questions
