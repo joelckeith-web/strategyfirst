@@ -63,18 +63,31 @@ export function MinimalInputForm() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/research', {
+      // Parse service area into city/state
+      const locationParts = formData.primaryServiceArea.split(',').map(p => p.trim());
+      const city = locationParts[0] || formData.primaryServiceArea;
+      const state = locationParts[1] || '';
+
+      const response = await fetch('/api/research/trigger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          businessName: formData.businessName,
+          website: formData.websiteUrl,
+          gbpUrl: formData.gbpUrl || undefined,
+          city,
+          state,
+          location: formData.primaryServiceArea,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to start research');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to start research');
       }
 
-      const { clientId } = await response.json();
-      router.push(`/research/${clientId}`);
+      const { sessionId } = await response.json();
+      router.push(`/research/${sessionId}`);
     } catch (error) {
       console.error('Error starting research:', error);
       alert('Failed to start research. Please try again.');
