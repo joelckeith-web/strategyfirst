@@ -7,17 +7,33 @@ import { Button } from '@/components/ui/Button';
 
 type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
 
-interface ResearchProgress {
-  clientId: string;
-  gbp: { status: TaskStatus; error?: string };
-  sitemap: { status: TaskStatus; error?: string };
-  website: { status: TaskStatus; error?: string };
-  competitors: { status: TaskStatus; error?: string };
-  overallStatus: 'pending' | 'running' | 'completed' | 'partial';
+interface ResearchProgressData {
+  currentStep: string;
+  completedSteps: string[];
+  failedSteps: string[];
+  percentage: number;
+}
+
+interface ResearchSessionStatus {
+  sessionId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  progress: ResearchProgressData;
+  results: Record<string, unknown>;
+  errors: Array<{ step: string; message: string }>;
+  input: {
+    businessName: string;
+    website: string;
+    city?: string;
+    state?: string;
+    industry?: string;
+  };
+  createdAt: string;
+  completedAt: string | null;
 }
 
 interface ResearchProgressProps {
-  clientId: string;
+  sessionId: string;
+  onComplete?: (results: Record<string, unknown>) => void;
 }
 
 const TASK_INFO = {
@@ -25,21 +41,37 @@ const TASK_INFO = {
     label: 'Google Business Profile',
     description: 'Fetching rating, reviews, categories, and contact info',
     icon: '📍',
-  },
-  sitemap: {
-    label: 'Sitemap Analysis',
-    description: 'Analyzing page structure, blog, and service pages',
-    icon: '🗺️',
-  },
-  website: {
-    label: 'Website Crawl',
-    description: 'Detecting CMS, SSL, schema, and technical details',
-    icon: '🌐',
+    resultKey: 'gbp',
   },
   competitors: {
     label: 'Competitor Research',
     description: 'Finding and analyzing top local competitors',
     icon: '🏆',
+    resultKey: 'competitors',
+  },
+  website: {
+    label: 'Website Crawl',
+    description: 'Detecting CMS, SSL, schema, and technical details',
+    icon: '🌐',
+    resultKey: 'websiteCrawl',
+  },
+  sitemap: {
+    label: 'Sitemap Analysis',
+    description: 'Analyzing page structure, blog, and service pages',
+    icon: '🗺️',
+    resultKey: 'sitemap',
+  },
+  seo: {
+    label: 'SEO Audit',
+    description: 'Analyzing performance, mobile friendliness, and technical SEO',
+    icon: '📊',
+    resultKey: 'seoAudit',
+  },
+  citations: {
+    label: 'Citation Check',
+    description: 'Checking business listings and NAP consistency',
+    icon: '📋',
+    resultKey: 'citations',
   },
 };
 
@@ -114,57 +146,95 @@ function TaskCard({
   );
 }
 
-export function ResearchProgress({ clientId }: ResearchProgressProps) {
+export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProps) {
   const router = useRouter();
-  const [progress, setProgress] = useState<ResearchProgress | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<ResearchSessionStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProgress = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/research/${clientId}`);
-      if (!response.ok) throw new Error('Failed to fetch progress');
+  // Derive task statuses from progress data
+  const getTaskStatus = useCallback((taskKey: keyof typeof TASK_INFO): TaskStatus => {
+    if (!sessionStatus) return 'pending';
 
-      const data = await response.json();
-      setProgress(data);
+    const { progress, results } = sessionStatus;
+    const info = TASK_INFO[taskKey];
+
+    // Check if failed
+    if (progress.failedSteps.includes(taskKey)) {
+      return 'failed';
+    }
+
+    // Check if completed (step in completedSteps OR result exists)
+    if (progress.completedSteps.includes(taskKey) || results[info.resultKey]) {
+      return 'completed';
+    }
+
+    // Check if currently running
+    if (progress.currentStep === taskKey) {
+      return 'running';
+    }
+
+    return 'pending';
+  }, [sessionStatus]);
+
+  const getTaskError = useCallback((taskKey: string): string | undefined => {
+    if (!sessionStatus?.errors) return undefined;
+    const taskError = sessionStatus.errors.find(e => e.step === taskKey);
+    return taskError?.message;
+  }, [sessionStatus]);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/research/status/${sessionId}`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Research session not found');
+        }
+        throw new Error('Failed to fetch status');
+      }
+
+      const data: ResearchSessionStatus = await response.json();
+      setSessionStatus(data);
       setIsLoading(false);
 
-      return data.overallStatus;
+      // Notify parent when complete
+      if (data.status === 'completed' && onComplete) {
+        onComplete(data.results);
+      }
+
+      return data.status;
     } catch (err) {
-      console.error('Error fetching progress:', err);
-      setError('Failed to load research progress');
+      console.error('Error fetching status:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load research progress');
       setIsLoading(false);
       return null;
     }
-  }, [clientId]);
+  }, [sessionId, onComplete]);
 
   useEffect(() => {
     // Initial fetch
-    fetchProgress();
+    fetchStatus();
 
-    // Poll every 3 seconds while research is running
+    // Poll every 2 seconds while research is running
     const interval = setInterval(async () => {
-      const status = await fetchProgress();
-      if (status === 'completed' || status === 'partial') {
+      const status = await fetchStatus();
+      if (status === 'completed' || status === 'failed') {
         clearInterval(interval);
       }
-    }, 3000);
+    }, 2000);
 
     return () => clearInterval(interval);
-  }, [fetchProgress]);
+  }, [fetchStatus]);
 
   const getCompletedCount = () => {
-    if (!progress) return 0;
-    return [progress.gbp, progress.sitemap, progress.website, progress.competitors]
-      .filter(t => t.status === 'completed').length;
+    const tasks = Object.keys(TASK_INFO) as Array<keyof typeof TASK_INFO>;
+    return tasks.filter(key => getTaskStatus(key) === 'completed').length;
   };
 
   const canProceed = () => {
-    if (!progress) return false;
-    // Can proceed if at least one task completed successfully
-    return getCompletedCount() > 0 &&
-      progress.overallStatus !== 'running' &&
-      progress.overallStatus !== 'pending';
+    if (!sessionStatus) return false;
+    return sessionStatus.status === 'completed' ||
+      (sessionStatus.status !== 'running' && getCompletedCount() > 0);
   };
 
   if (isLoading) {
@@ -201,68 +271,74 @@ export function ResearchProgress({ clientId }: ResearchProgressProps) {
     );
   }
 
+  const taskKeys = Object.keys(TASK_INFO) as Array<keyof typeof TASK_INFO>;
+  const totalTasks = taskKeys.length;
+  const completedCount = getCompletedCount();
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">Research in Progress</h2>
+            <h2 className="text-xl font-semibold text-gray-900">
+              {sessionStatus?.input?.businessName || 'Research in Progress'}
+            </h2>
             <p className="text-sm text-gray-600 mt-1">
-              {progress?.overallStatus === 'running'
+              {sessionStatus?.status === 'running'
                 ? 'Gathering data from multiple sources...'
-                : progress?.overallStatus === 'completed'
+                : sessionStatus?.status === 'completed'
                 ? 'All research tasks completed!'
-                : 'Research completed with partial results'}
+                : sessionStatus?.status === 'failed'
+                ? 'Research encountered errors'
+                : 'Research starting...'}
             </p>
           </div>
           <div className="text-right">
-            <span className="text-2xl font-bold text-blue-600">{getCompletedCount()}/4</span>
+            <span className="text-2xl font-bold text-blue-600">
+              {completedCount}/{totalTasks}
+            </span>
             <p className="text-xs text-gray-500">tasks complete</p>
+            {sessionStatus?.progress?.percentage !== undefined && (
+              <div className="w-24 h-2 bg-gray-200 rounded-full mt-2">
+                <div
+                  className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                  style={{ width: `${sessionStatus.progress.percentage}%` }}
+                />
+              </div>
+            )}
           </div>
         </div>
       </CardHeader>
       <CardBody>
-        <div className="space-y-4">
-          <TaskCard
-            taskKey="gbp"
-            status={progress?.gbp.status || 'pending'}
-            error={progress?.gbp.error}
-          />
-          <TaskCard
-            taskKey="sitemap"
-            status={progress?.sitemap.status || 'pending'}
-            error={progress?.sitemap.error}
-          />
-          <TaskCard
-            taskKey="website"
-            status={progress?.website.status || 'pending'}
-            error={progress?.website.error}
-          />
-          <TaskCard
-            taskKey="competitors"
-            status={progress?.competitors.status || 'pending'}
-            error={progress?.competitors.error}
-          />
+        <div className="space-y-3">
+          {taskKeys.map(taskKey => (
+            <TaskCard
+              key={taskKey}
+              taskKey={taskKey}
+              status={getTaskStatus(taskKey)}
+              error={getTaskError(taskKey)}
+            />
+          ))}
         </div>
 
         {canProceed() && (
           <div className="mt-6 pt-6 border-t border-gray-200">
             <Button
-              onClick={() => router.push(`/research/${clientId}/verify`)}
+              onClick={() => router.push(`/research/${sessionId}/results`)}
               className="w-full"
             >
-              Continue to Verification
+              View Results
             </Button>
             <p className="text-xs text-center text-gray-500 mt-2">
-              Review and confirm the auto-populated data before analysis
+              Review the research findings and recommendations
             </p>
           </div>
         )}
 
-        {progress?.overallStatus === 'running' && (
+        {sessionStatus?.status === 'running' && (
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
-              This may take 1-2 minutes. You can leave this page and come back.
+              This usually takes less than a minute.
             </p>
           </div>
         )}

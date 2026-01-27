@@ -1,0 +1,693 @@
+{
+  "name": "Strategy First - Research Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "research-trigger",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "research-trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract input data from webhook\nconst { sessionId, input, callbackUrl } = $input.first().json;\n\n// Store in workflow variables for all branches\nreturn [\n  {\n    json: {\n      sessionId,\n      callbackUrl,\n      businessName: input.businessName,\n      websiteUrl: input.websiteUrl,\n      location: input.location || '',\n      gbpUrl: input.gbpUrl || '',\n      industry: input.industry || '',\n      startedAt: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "id": "parse-input",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {},
+      "id": "parallel-split",
+      "name": "Run Research Tasks",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "actorId": "compass/crawler-google-places",
+        "input": "={{ JSON.stringify({\n  searchStringsArray: [$json.businessName + ' ' + $json.location],\n  maxCrawledPlacesPerSearch: 1,\n  language: 'en',\n  includeWebResults: false\n}) }}"
+      },
+      "id": "apify-gbp",
+      "name": "Apify: GBP Lookup",
+      "type": "n8n-nodes-base.apify",
+      "typeVersion": 1,
+      "position": [910, 100],
+      "credentials": {
+        "apifyApi": {
+          "id": "APIFY_CREDENTIAL_ID",
+          "name": "Apify API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform Apify GBP result to our format\nconst input = $('Parse Input').first().json;\nconst apifyResult = $input.first().json;\n\nlet gbpData = null;\n\nif (apifyResult && apifyResult.length > 0) {\n  const place = apifyResult[0];\n  gbpData = {\n    name: place.title || place.name || input.businessName,\n    rating: place.totalScore || place.rating || 0,\n    reviewCount: place.reviewsCount || 0,\n    categories: place.categories || [],\n    phone: place.phone || null,\n    address: place.address || null,\n    website: place.website || input.websiteUrl,\n    hours: place.openingHours || {},\n    photos: place.imageUrls || [],\n    placeId: place.placeId || null,\n    mapsUrl: place.url || null\n  };\n}\n\nreturn [{\n  json: {\n    sessionId: input.sessionId,\n    callbackUrl: input.callbackUrl,\n    step: 'gbp',\n    status: gbpData ? 'completed' : 'failed',\n    data: gbpData,\n    error: gbpData ? null : {\n      step: 'gbp',\n      code: 'PLACE_NOT_FOUND',\n      message: 'Could not find Google Business Profile',\n      recoverable: true\n    }\n  }\n}];"
+      },
+      "id": "transform-gbp",
+      "name": "Transform GBP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 100]
+    },
+    {
+      "parameters": {
+        "actorId": "compass/crawler-google-places",
+        "input": "={{ JSON.stringify({\n  searchStringsArray: [$json.industry + ' near ' + $json.location],\n  maxCrawledPlacesPerSearch: 10,\n  language: 'en',\n  includeWebResults: false\n}) }}"
+      },
+      "id": "apify-competitors",
+      "name": "Apify: Competitors",
+      "type": "n8n-nodes-base.apify",
+      "typeVersion": 1,
+      "position": [910, 250],
+      "credentials": {
+        "apifyApi": {
+          "id": "APIFY_CREDENTIAL_ID",
+          "name": "Apify API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform Apify competitors result\nconst input = $('Parse Input').first().json;\nconst apifyResults = $input.first().json || [];\n\nconst competitors = apifyResults\n  .filter(place => place.title !== input.businessName)\n  .slice(0, 10)\n  .map((place, index) => ({\n    rank: index + 1,\n    name: place.title || place.name,\n    rating: place.totalScore || place.rating || 0,\n    reviewCount: place.reviewsCount || 0,\n    website: place.website || null,\n    phone: place.phone || null,\n    address: place.address || null,\n    categories: place.categories || [],\n    distance: place.distance || null\n  }));\n\nreturn [{\n  json: {\n    sessionId: input.sessionId,\n    callbackUrl: input.callbackUrl,\n    step: 'competitors',\n    status: 'completed',\n    data: competitors\n  }\n}];"
+      },
+      "id": "transform-competitors",
+      "name": "Transform Competitors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 250]
+    },
+    {
+      "parameters": {
+        "actorId": "apify/website-content-crawler",
+        "input": "={{ JSON.stringify({\n  startUrls: [{ url: $json.websiteUrl }],\n  maxCrawlPages: 20,\n  crawlerType: 'cheerio',\n  includeUrlGlobs: [],\n  excludeUrlGlobs: [],\n  maxCrawlDepth: 3\n}) }}"
+      },
+      "id": "apify-website",
+      "name": "Apify: Website Crawl",
+      "type": "n8n-nodes-base.apify",
+      "typeVersion": 1,
+      "position": [910, 400],
+      "credentials": {
+        "apifyApi": {
+          "id": "APIFY_CREDENTIAL_ID",
+          "name": "Apify API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform website crawl result\nconst input = $('Parse Input').first().json;\nconst crawlResults = $input.first().json || [];\n\n// Detect CMS from meta tags or known patterns\nfunction detectCMS(html) {\n  if (!html) return null;\n  if (html.includes('wp-content') || html.includes('wordpress')) return 'WordPress';\n  if (html.includes('Shopify')) return 'Shopify';\n  if (html.includes('wix.com')) return 'Wix';\n  if (html.includes('squarespace')) return 'Squarespace';\n  if (html.includes('webflow')) return 'Webflow';\n  return null;\n}\n\nconst firstPage = crawlResults[0] || {};\nconst allText = crawlResults.map(p => p.text || '').join(' ');\n\nconst websiteData = {\n  cms: detectCMS(firstPage.html || ''),\n  technologies: [], // Would need more analysis\n  ssl: input.websiteUrl.startsWith('https'),\n  mobileResponsive: true, // Assume true, would need viewport testing\n  structuredData: (firstPage.html || '').includes('application/ld+json'),\n  schemaTypes: [], // Would parse from structured data\n  description: firstPage.description || null,\n  title: firstPage.title || null,\n  pages: crawlResults.slice(0, 20).map(page => ({\n    url: page.url,\n    title: page.title || '',\n    wordCount: (page.text || '').split(/\\s+/).length\n  }))\n};\n\nreturn [{\n  json: {\n    sessionId: input.sessionId,\n    callbackUrl: input.callbackUrl,\n    step: 'website',\n    status: 'completed',\n    data: websiteData\n  }\n}];"
+      },
+      "id": "transform-website",
+      "name": "Transform Website",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 400]
+    },
+    {
+      "parameters": {
+        "actorId": "lukaskrivka/sitemap-sniffer",
+        "input": "={{ JSON.stringify({\n  startUrl: $json.websiteUrl,\n  maxDepth: 3,\n  maxUrls: 500\n}) }}"
+      },
+      "id": "apify-sitemap",
+      "name": "Apify: Sitemap",
+      "type": "n8n-nodes-base.apify",
+      "typeVersion": 1,
+      "position": [910, 550],
+      "credentials": {
+        "apifyApi": {
+          "id": "APIFY_CREDENTIAL_ID",
+          "name": "Apify API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform sitemap result\nconst input = $('Parse Input').first().json;\nconst sitemapResults = $input.first().json || [];\n\n// Categorize pages by URL patterns\nfunction categorizeUrl(url) {\n  const lower = url.toLowerCase();\n  if (lower.includes('/service') || lower.includes('/what-we-do')) return 'services';\n  if (lower.includes('/blog') || lower.includes('/news') || lower.includes('/article')) return 'blog';\n  if (lower.includes('/location') || lower.includes('/area') || lower.includes('/city')) return 'locations';\n  if (lower.includes('/about')) return 'about';\n  if (lower.includes('/contact')) return 'contact';\n  if (lower.includes('/faq')) return 'faq';\n  return 'other';\n}\n\nconst urls = Array.isArray(sitemapResults) ? sitemapResults : (sitemapResults.urls || []);\nconst pageTypes = {};\n\nurls.forEach(item => {\n  const url = typeof item === 'string' ? item : item.url;\n  const type = categorizeUrl(url);\n  pageTypes[type] = (pageTypes[type] || 0) + 1;\n});\n\nconst sitemapData = {\n  totalPages: urls.length,\n  pageTypes,\n  hasServicePages: (pageTypes.services || 0) > 0,\n  hasBlog: (pageTypes.blog || 0) > 0,\n  hasLocationPages: (pageTypes.locations || 0) > 0,\n  recentlyUpdated: 0 // Would need lastmod parsing\n};\n\nreturn [{\n  json: {\n    sessionId: input.sessionId,\n    callbackUrl: input.callbackUrl,\n    step: 'sitemap',\n    status: 'completed',\n    data: sitemapData\n  }\n}];"
+      },
+      "id": "transform-sitemap",
+      "name": "Transform Sitemap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 550]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={{ encodeURIComponent($json.websiteUrl) }}&strategy=mobile&category=performance&category=accessibility&category=best-practices&category=seo",
+        "options": {}
+      },
+      "id": "pagespeed-api",
+      "name": "PageSpeed API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [910, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform PageSpeed result to SEO audit format\nconst input = $('Parse Input').first().json;\nconst psResult = $input.first().json;\n\nlet seoData = null;\n\ntry {\n  const lighthouse = psResult.lighthouseResult;\n  const categories = lighthouse?.categories || {};\n  const audits = lighthouse?.audits || {};\n  \n  seoData = {\n    score: Math.round((categories.seo?.score || 0) * 100),\n    mobile: {\n      score: Math.round((categories.performance?.score || 0) * 100),\n      usability: (audits['viewport']?.score || 0) === 1,\n      viewport: (audits['viewport']?.score || 0) === 1,\n      textSize: (audits['font-size']?.score || 0) >= 0.9\n    },\n    performance: {\n      score: Math.round((categories.performance?.score || 0) * 100),\n      lcp: audits['largest-contentful-paint']?.numericValue || 0,\n      fid: audits['max-potential-fid']?.numericValue || 0,\n      cls: audits['cumulative-layout-shift']?.numericValue || 0,\n      ttfb: audits['server-response-time']?.numericValue || 0\n    },\n    technical: {\n      ssl: input.websiteUrl.startsWith('https'),\n      canonicalTag: (audits['canonical']?.score || 0) === 1,\n      robotsTxt: (audits['robots-txt']?.score || 0) === 1,\n      sitemap: true, // Assume if we got sitemap data\n      structuredData: audits['structured-data']?.details?.items?.map(i => i.type) || [],\n      metaDescription: (audits['meta-description']?.score || 0) === 1,\n      h1Tags: 1 // Would need more parsing\n    },\n    content: {\n      wordCount: 0, // From website crawl\n      headings: 0,\n      images: audits['image-alt']?.details?.items?.length || 0,\n      imagesWithAlt: 0,\n      internalLinks: 0,\n      externalLinks: 0\n    }\n  };\n} catch (e) {\n  // PageSpeed failed, return minimal data\n  seoData = {\n    score: 0,\n    mobile: { score: 0, usability: false, viewport: false, textSize: false },\n    performance: { score: 0, lcp: 0, fid: 0, cls: 0, ttfb: 0 },\n    technical: { ssl: input.websiteUrl.startsWith('https'), canonicalTag: false, robotsTxt: false, sitemap: false, structuredData: [], metaDescription: false, h1Tags: 0 },\n    content: { wordCount: 0, headings: 0, images: 0, imagesWithAlt: 0, internalLinks: 0, externalLinks: 0 }\n  };\n}\n\nreturn [{\n  json: {\n    sessionId: input.sessionId,\n    callbackUrl: input.callbackUrl,\n    step: 'seo',\n    status: 'completed',\n    data: seoData\n  }\n}];"
+      },
+      "id": "transform-seo",
+      "name": "Transform SEO",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check citations on common directories\nconst input = $('Parse Input').first().json;\nconst businessName = input.businessName;\nconst encodedName = encodeURIComponent(businessName);\n\n// List of citation sources to check\nconst sources = [\n  { name: 'Yelp', checkUrl: `https://www.yelp.com/search?find_desc=${encodedName}` },\n  { name: 'BBB', checkUrl: `https://www.bbb.org/search?find_text=${encodedName}` },\n  { name: 'Yellow Pages', checkUrl: `https://www.yellowpages.com/search?search_terms=${encodedName}` },\n  { name: 'Angi', checkUrl: `https://www.angi.com/companylist/us/${encodedName}` },\n  { name: 'Facebook', checkUrl: `https://www.facebook.com/search/pages?q=${encodedName}` }\n];\n\n// For now, return placeholder data\n// In production, you'd make actual HTTP requests to check\nconst citations = sources.map(source => ({\n  source: source.name,\n  found: Math.random() > 0.3, // Placeholder\n  url: null,\n  napConsistent: Math.random() > 0.2\n}));\n\nreturn [{\n  json: {\n    sessionId: input.sessionId,\n    callbackUrl: input.callbackUrl,\n    step: 'citations',\n    status: 'completed',\n    data: citations\n  }\n}];"
+      },
+      "id": "check-citations",
+      "name": "Check Citations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 850]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Webhook-Secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  sessionId: $json.sessionId,\n  step: $json.step,\n  status: $json.status,\n  data: $json.data,\n  error: $json.error || null\n}) }}",
+        "options": {}
+      },
+      "id": "callback-gbp",
+      "name": "Callback: GBP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Webhook-Secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  sessionId: $json.sessionId,\n  step: $json.step,\n  status: $json.status,\n  data: $json.data,\n  error: $json.error || null\n}) }}",
+        "options": {}
+      },
+      "id": "callback-competitors",
+      "name": "Callback: Competitors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 250]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Webhook-Secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  sessionId: $json.sessionId,\n  step: $json.step,\n  status: $json.status,\n  data: $json.data,\n  error: $json.error || null\n}) }}",
+        "options": {}
+      },
+      "id": "callback-website",
+      "name": "Callback: Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Webhook-Secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  sessionId: $json.sessionId,\n  step: $json.step,\n  status: $json.status,\n  data: $json.data,\n  error: $json.error || null\n}) }}",
+        "options": {}
+      },
+      "id": "callback-sitemap",
+      "name": "Callback: Sitemap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 550]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Webhook-Secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  sessionId: $json.sessionId,\n  step: $json.step,\n  status: $json.status,\n  data: $json.data,\n  error: $json.error || null\n}) }}",
+        "options": {}
+      },
+      "id": "callback-seo",
+      "name": "Callback: SEO",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 700]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Webhook-Secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  sessionId: $json.sessionId,\n  step: $json.step,\n  status: $json.status,\n  data: $json.data,\n  error: $json.error || null\n}) }}",
+        "options": {}
+      },
+      "id": "callback-citations",
+      "name": "Callback: Citations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1130, 850]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "sessionId",
+              "field2": "sessionId"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "merge-results",
+      "name": "Wait for All",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1570, 450]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send final completion callback\nconst input = $('Parse Input').first().json;\nconst startedAt = input.startedAt;\nconst completedAt = new Date().toISOString();\nconst duration = new Date(completedAt) - new Date(startedAt);\n\nreturn [{\n  json: {\n    sessionId: input.sessionId,\n    callbackUrl: input.callbackUrl,\n    step: 'complete',\n    status: 'completed',\n    data: {\n      metadata: {\n        startedAt,\n        completedAt,\n        duration,\n        dataConfidence: 0.85\n      }\n    }\n  }\n}];"
+      },
+      "id": "prepare-final",
+      "name": "Prepare Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1790, 450]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Webhook-Secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  sessionId: $json.sessionId,\n  step: 'complete',\n  status: 'completed',\n  data: $json.data\n}) }}",
+        "options": {}
+      },
+      "id": "callback-final",
+      "name": "Callback: Complete",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2010, 450]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: 'Research workflow started',\n  executionId: $execution.id\n}) }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [690, 500]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "Run Research Tasks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Research Tasks": {
+      "main": [
+        [
+          {
+            "node": "Apify: GBP Lookup",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Apify: Competitors",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Apify: Website Crawl",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Apify: Sitemap",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PageSpeed API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Citations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apify: GBP Lookup": {
+      "main": [
+        [
+          {
+            "node": "Transform GBP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform GBP": {
+      "main": [
+        [
+          {
+            "node": "Callback: GBP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apify: Competitors": {
+      "main": [
+        [
+          {
+            "node": "Transform Competitors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Competitors": {
+      "main": [
+        [
+          {
+            "node": "Callback: Competitors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apify: Website Crawl": {
+      "main": [
+        [
+          {
+            "node": "Transform Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Website": {
+      "main": [
+        [
+          {
+            "node": "Callback: Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apify: Sitemap": {
+      "main": [
+        [
+          {
+            "node": "Transform Sitemap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Sitemap": {
+      "main": [
+        [
+          {
+            "node": "Callback: Sitemap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PageSpeed API": {
+      "main": [
+        [
+          {
+            "node": "Transform SEO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform SEO": {
+      "main": [
+        [
+          {
+            "node": "Callback: SEO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Citations": {
+      "main": [
+        [
+          {
+            "node": "Callback: Citations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback: GBP": {
+      "main": [
+        [
+          {
+            "node": "Wait for All",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback: Competitors": {
+      "main": [
+        [
+          {
+            "node": "Wait for All",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback: Website": {
+      "main": [
+        [
+          {
+            "node": "Wait for All",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback: Sitemap": {
+      "main": [
+        [
+          {
+            "node": "Wait for All",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback: SEO": {
+      "main": [
+        [
+          {
+            "node": "Wait for All",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback: Citations": {
+      "main": [
+        [
+          {
+            "node": "Wait for All",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for All": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final": {
+      "main": [
+        [
+          {
+            "node": "Callback: Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "pinData": {}
+}

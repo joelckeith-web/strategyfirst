@@ -8,7 +8,7 @@ export default function ResearchProgressPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = use(params);
+  const { id: sessionId } = use(params);
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -19,7 +19,7 @@ export default function ResearchProgressPage({
         </p>
       </div>
 
-      <ResearchProgress clientId={id} />
+      <ResearchProgress sessionId={sessionId} />
     </div>
   );
 }

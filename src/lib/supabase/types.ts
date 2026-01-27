@@ -177,6 +177,50 @@ export type Database = {
           completed_at?: string | null;
         };
       };
+      research_sessions: {
+        Row: {
+          id: string;
+          client_id: string | null;
+          input: Json;
+          status: string;
+          progress: Json;
+          results: Json;
+          errors: Json;
+          n8n_execution_id: string | null;
+          callback_url: string | null;
+          created_at: string;
+          updated_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          client_id?: string | null;
+          input: Json;
+          status?: string;
+          progress?: Json;
+          results?: Json;
+          errors?: Json;
+          n8n_execution_id?: string | null;
+          callback_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          completed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          client_id?: string | null;
+          input?: Json;
+          status?: string;
+          progress?: Json;
+          results?: Json;
+          errors?: Json;
+          n8n_execution_id?: string | null;
+          callback_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          completed_at?: string | null;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -197,8 +241,12 @@ export type Analysis = Database['public']['Tables']['analyses']['Row'];
 export type AnalysisInsert = Database['public']['Tables']['analyses']['Insert'];
 export type AnalysisUpdate = Database['public']['Tables']['analyses']['Update'];
 
+export type ResearchSession = Database['public']['Tables']['research_sessions']['Row'];
+export type ResearchSessionInsert = Database['public']['Tables']['research_sessions']['Insert'];
+export type ResearchSessionUpdate = Database['public']['Tables']['research_sessions']['Update'];
+
 // Research task status type
-export type ResearchStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type ResearchStatus = 'pending' | 'running' | 'completed' | 'failed' | 'partial' | 'timeout';
 
 // Combined client with research results
 export interface ClientWithResearch extends Client {

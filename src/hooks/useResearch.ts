@@ -1,18 +1,30 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabase/client';
 import type {
-  ResearchInput,
-  ResearchSession,
   ResearchStatus,
   ResearchProgress,
   ResearchResults,
   ResearchError,
 } from '@/types/research';
 
+interface ResearchInput {
+  businessName: string;
+  website?: string;
+  websiteUrl?: string;
+  city?: string;
+  state?: string;
+  location?: string;
+  serviceAreas?: string[];
+  industry?: string;
+  primaryServices?: string[];
+  gbpUrl?: string;
+}
+
 interface UseResearchOptions {
   pollingInterval?: number; // Default 3000ms
-  autoStartPolling?: boolean;
+  useRealtime?: boolean; // Use Supabase realtime instead of polling
 }
 
 interface UseResearchReturn {
@@ -31,10 +43,11 @@ interface UseResearchReturn {
   startPolling: () => void;
   stopPolling: () => void;
   reset: () => void;
+  loadSession: (sessionId: string) => Promise<void>;
 }
 
 export function useResearch(options: UseResearchOptions = {}): UseResearchReturn {
-  const { pollingInterval = 3000, autoStartPolling = true } = options;
+  const { pollingInterval = 3000, useRealtime = true } = options;
 
   // State
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -45,14 +58,31 @@ export function useResearch(options: UseResearchOptions = {}): UseResearchReturn
   const [isLoading, setIsLoading] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
 
-  // Refs for polling
+  // Refs for polling and realtime
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Keep sessionIdRef in sync
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+
+  // Update state from session data
+  const updateFromSession = useCallback((session: {
+    id: string;
+    status: string;
+    progress: unknown;
+    results: unknown;
+    errors: unknown;
+  }) => {
+    setStatus(session.status as ResearchStatus);
+    setProgress(session.progress as ResearchProgress);
+    setResults(session.results as Partial<ResearchResults>);
+    if (session.errors && Array.isArray(session.errors)) {
+      setErrors(session.errors as ResearchError[]);
+    }
+  }, []);
 
   // Start research
   const startResearch = useCallback(async (input: ResearchInput): Promise<string | null> => {
@@ -85,8 +115,10 @@ export function useResearch(options: UseResearchOptions = {}): UseResearchReturn
         percentage: 0,
       });
 
-      // Start polling if auto-start is enabled
-      if (autoStartPolling) {
+      // Set up realtime subscription or start polling
+      if (useRealtime) {
+        setupRealtimeSubscription(newSessionId);
+      } else {
         startPollingInternal(newSessionId);
       }
 
@@ -103,9 +135,51 @@ export function useResearch(options: UseResearchOptions = {}): UseResearchReturn
     } finally {
       setIsLoading(false);
     }
-  }, [autoStartPolling]);
+  }, [useRealtime]);
 
-  // Poll status
+  // Set up Supabase realtime subscription
+  const setupRealtimeSubscription = useCallback((sid: string) => {
+    // Clean up any existing subscription
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+    }
+
+    const channel = supabase
+      .channel(`research-${sid}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'research_sessions',
+          filter: `id=eq.${sid}`,
+        },
+        (payload) => {
+          const newSession = payload.new as {
+            id: string;
+            status: string;
+            progress: unknown;
+            results: unknown;
+            errors: unknown;
+          };
+          updateFromSession(newSession);
+
+          // Stop subscription if research is complete
+          if (['completed', 'failed', 'partial', 'timeout'].includes(newSession.status)) {
+            if (realtimeChannelRef.current) {
+              supabase.removeChannel(realtimeChannelRef.current);
+              realtimeChannelRef.current = null;
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    realtimeChannelRef.current = channel;
+    setIsPolling(true);
+  }, [updateFromSession]);
+
+  // Poll status (fallback when realtime is not used)
   const pollStatus = useCallback(async (): Promise<void> => {
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) return;
@@ -115,7 +189,6 @@ export function useResearch(options: UseResearchOptions = {}): UseResearchReturn
 
       if (!response.ok) {
         if (response.status === 404) {
-          // Session not found - stop polling
           stopPolling();
           setErrors(prev => [...prev, {
             step: 'poll',
@@ -178,8 +251,53 @@ export function useResearch(options: UseResearchOptions = {}): UseResearchReturn
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+      realtimeChannelRef.current = null;
+    }
     setIsPolling(false);
   }, []);
+
+  // Load an existing session
+  const loadSession = useCallback(async (sid: string): Promise<void> => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/research/status/${sid}`);
+
+      if (!response.ok) {
+        throw new Error('Session not found');
+      }
+
+      const data = await response.json();
+
+      setSessionId(sid);
+      setStatus(data.status);
+      setProgress(data.progress);
+      setResults(data.results);
+      if (data.errors?.length) {
+        setErrors(data.errors);
+      }
+
+      // If session is still running, set up monitoring
+      if (data.status === 'running' || data.status === 'pending') {
+        if (useRealtime) {
+          setupRealtimeSubscription(sid);
+        } else {
+          startPollingInternal(sid);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading session:', error);
+      setErrors([{
+        step: 'load',
+        code: 'LOAD_FAILED',
+        message: error instanceof Error ? error.message : 'Failed to load session',
+        recoverable: false,
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [useRealtime, setupRealtimeSubscription, startPollingInternal]);
 
   // Reset state
   const reset = useCallback(() => {
@@ -198,6 +316,9 @@ export function useResearch(options: UseResearchOptions = {}): UseResearchReturn
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
       }
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
     };
   }, []);
 
@@ -214,24 +335,24 @@ export function useResearch(options: UseResearchOptions = {}): UseResearchReturn
     startPolling,
     stopPolling,
     reset,
+    loadSession,
   };
 }
 
-// Helper hook for resuming an existing session
+/**
+ * Hook for loading and monitoring an existing research session
+ */
 export function useResearchSession(
   existingSessionId: string | null,
   options: UseResearchOptions = {}
 ): UseResearchReturn {
-  const research = useResearch({ ...options, autoStartPolling: false });
+  const research = useResearch(options);
 
   useEffect(() => {
     if (existingSessionId && existingSessionId !== research.sessionId) {
-      // Manually set session ID and start polling
-      research.reset();
-      // We need to trigger a poll for the existing session
-      // This is a bit of a workaround since we can't directly set sessionId
+      research.loadSession(existingSessionId);
     }
-  }, [existingSessionId]);
+  }, [existingSessionId, research.sessionId, research.loadSession]);
 
   return research;
 }

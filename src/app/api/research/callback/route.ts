@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { ResearchCallbackPayload, ResearchSession } from '@/types/research';
+import { supabaseAdmin } from '@/lib/supabase/client';
+import { transformApifyResultsToResearch } from '@/lib/transformers';
+import type { N8NCallbackPayload } from '@/types/apify-outputs';
 
-// Import the shared sessions map from trigger route
-// In production, this would be a database query
-import { researchSessions } from '../trigger/route';
-
-// POST - Receive callback from n8n when a step completes
+/**
+ * POST /api/research/callback
+ * Receives callbacks from n8n when research steps complete
+ */
 export async function POST(request: NextRequest) {
   try {
     // Verify webhook secret if configured
@@ -17,99 +18,241 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const payload = (await request.json()) as ResearchCallbackPayload;
-    const { sessionId, step, status, data, error } = payload;
+    const payload = (await request.json()) as N8NCallbackPayload;
+    const { sessionId, status, step, data, apifyResults, errors, executionId } = payload;
 
-    // Find the session
-    const session = researchSessions.get(sessionId);
-    if (!session) {
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: 'Session ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Find the session in Supabase
+    const { data: sessionData, error: fetchError } = await supabaseAdmin
+      .from('research_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .single();
+
+    if (fetchError || !sessionData) {
+      console.error('Session not found:', sessionId, fetchError);
       return NextResponse.json(
         { error: 'Session not found' },
         { status: 404 }
       );
     }
 
-    // Update session based on step
-    session.updatedAt = new Date().toISOString();
+    // Type the session data
+    const session = sessionData as {
+      id: string;
+      status: string;
+      progress: unknown;
+      results: unknown;
+      errors: unknown;
+      input: unknown;
+      n8n_execution_id: string | null;
+    };
 
-    if (status === 'completed' && data) {
-      // Store the results for this step
-      switch (step) {
-        case 'gbp':
-          session.results.gbp = data as ResearchSession['results']['gbp'];
-          session.progress.completedSteps.push('gbp');
-          break;
-        case 'competitors':
-          session.results.competitors = data as ResearchSession['results']['competitors'];
-          session.progress.completedSteps.push('competitors');
-          break;
-        case 'seo':
-          session.results.seoAudit = data as ResearchSession['results']['seoAudit'];
-          session.progress.completedSteps.push('seo');
-          break;
-        case 'sitemap':
-          session.results.sitemap = data as ResearchSession['results']['sitemap'];
-          session.progress.completedSteps.push('sitemap');
-          break;
-        case 'website':
-          session.results.websiteCrawl = data as ResearchSession['results']['websiteCrawl'];
-          session.progress.completedSteps.push('website');
-          break;
-        case 'citations':
-          session.results.citations = data as ResearchSession['results']['citations'];
-          session.progress.completedSteps.push('citations');
-          break;
-        case 'complete':
-          // Final callback - mark session complete
-          session.status = 'completed';
-          session.completedAt = new Date().toISOString();
-          session.progress.percentage = 100;
-          session.progress.currentStep = 'complete';
-          // Merge any final metadata
-          if (data && typeof data === 'object' && 'metadata' in data) {
-            session.results.metadata = (data as { metadata: ResearchSession['results']['metadata'] }).metadata;
-          }
-          break;
-      }
-    } else if (status === 'failed') {
-      // Handle step failure
-      session.progress.failedSteps.push(step);
-      if (error) {
-        session.errors.push(error);
-      }
+    // Get current state
+    const currentResults = (session.results as Record<string, unknown>) || {};
+    const currentProgress = (session.progress as {
+      currentStep: string;
+      completedSteps: string[];
+      failedSteps: string[];
+      percentage: number;
+    }) || {
+      currentStep: '',
+      completedSteps: [],
+      failedSteps: [],
+      percentage: 0,
+    };
+    const currentErrors = (session.errors as Array<{
+      step: string;
+      code?: string;
+      message: string;
+      recoverable?: boolean;
+    }>) || [];
+
+    // Get input for transformations
+    const input = session.input as {
+      businessName?: string;
+      website?: string;
+    };
+    const businessName = input?.businessName || '';
+    const websiteUrl = input?.website || '';
+
+    // Handle different callback formats
+
+    // Format 1: Complete n8n response with apifyResults
+    if (apifyResults && status === 'completed') {
+      const transformedResults = transformApifyResultsToResearch(
+        apifyResults,
+        businessName,
+        websiteUrl
+      );
+
+      await supabaseAdmin
+        .from('research_sessions')
+        .update({
+          status: 'completed',
+          results: { ...currentResults, ...transformedResults },
+          progress: {
+            currentStep: 'complete',
+            completedSteps: ['gbp', 'competitors', 'website', 'sitemap', 'seo', 'citations'],
+            failedSteps: [],
+            percentage: 100,
+          },
+          completed_at: new Date().toISOString(),
+          n8n_execution_id: executionId || session.n8n_execution_id,
+        } as never)
+        .eq('id', sessionId);
+
+      return NextResponse.json({
+        success: true,
+        sessionId,
+        status: 'completed',
+      });
     }
 
-    // Update progress percentage
-    const totalSteps = 6; // gbp, competitors, seo, sitemap, website, citations
-    const completedCount = session.progress.completedSteps.length;
-    session.progress.percentage = Math.round((completedCount / totalSteps) * 100);
-    session.progress.currentStep = step;
+    // Format 2: Step-by-step callbacks
+    if (step) {
+      const totalSteps = 6; // gbp, competitors, seo, sitemap, website, citations
+      let newResults = { ...currentResults };
+      let completedSteps = [...currentProgress.completedSteps];
+      let failedSteps = [...currentProgress.failedSteps];
+      let newErrors = [...currentErrors];
+      let sessionStatus = session.status;
 
-    // Check if all steps are done (either completed or failed)
-    const processedSteps = new Set([
-      ...session.progress.completedSteps,
-      ...session.progress.failedSteps,
-    ]);
-
-    if (processedSteps.size >= totalSteps && session.status !== 'completed') {
-      if (session.progress.failedSteps.length === totalSteps) {
-        session.status = 'failed';
-      } else if (session.progress.failedSteps.length > 0) {
-        session.status = 'partial';
-      } else {
-        session.status = 'completed';
+      if (status === 'completed' && data) {
+        // Store the results for this step
+        switch (step) {
+          case 'gbp':
+            newResults.gbp = data;
+            if (!completedSteps.includes('gbp')) completedSteps.push('gbp');
+            break;
+          case 'competitors':
+            newResults.competitors = data;
+            if (!completedSteps.includes('competitors')) completedSteps.push('competitors');
+            break;
+          case 'seo':
+            newResults.seoAudit = data;
+            if (!completedSteps.includes('seo')) completedSteps.push('seo');
+            break;
+          case 'sitemap':
+            newResults.sitemap = data;
+            if (!completedSteps.includes('sitemap')) completedSteps.push('sitemap');
+            break;
+          case 'website':
+            newResults.websiteCrawl = data;
+            if (!completedSteps.includes('website')) completedSteps.push('website');
+            break;
+          case 'citations':
+            newResults.citations = data;
+            if (!completedSteps.includes('citations')) completedSteps.push('citations');
+            break;
+          case 'complete':
+            // Final callback - mark session complete
+            sessionStatus = 'completed';
+            // Merge any final metadata
+            if (data && typeof data === 'object' && 'metadata' in data) {
+              newResults.metadata = (data as { metadata: unknown }).metadata;
+            }
+            break;
+        }
+      } else if (status === 'failed') {
+        // Handle step failure
+        if (!failedSteps.includes(step)) {
+          failedSteps.push(step);
+        }
+        if (errors && errors.length > 0) {
+          newErrors = [...newErrors, ...errors];
+        } else if (payload.errors) {
+          newErrors = [...newErrors, ...payload.errors];
+        }
       }
-      session.completedAt = new Date().toISOString();
+
+      // Calculate progress percentage
+      const completedCount = completedSteps.length;
+      const percentage = step === 'complete' ? 100 : Math.round((completedCount / totalSteps) * 100);
+
+      // Determine final status if all steps are processed
+      const processedSteps = new Set([...completedSteps, ...failedSteps]);
+      if (processedSteps.size >= totalSteps && sessionStatus !== 'completed') {
+        if (failedSteps.length === totalSteps) {
+          sessionStatus = 'failed';
+        } else if (failedSteps.length > 0) {
+          sessionStatus = 'partial';
+        } else {
+          sessionStatus = 'completed';
+        }
+      }
+
+      // Update session
+      const updateData: Record<string, unknown> = {
+        status: sessionStatus,
+        results: newResults,
+        progress: {
+          currentStep: step,
+          completedSteps,
+          failedSteps,
+          percentage,
+        },
+        errors: newErrors,
+      };
+
+      if (sessionStatus === 'completed' || sessionStatus === 'failed' || sessionStatus === 'partial') {
+        updateData.completed_at = new Date().toISOString();
+      }
+
+      await supabaseAdmin
+        .from('research_sessions')
+        .update(updateData as never)
+        .eq('id', sessionId);
+
+      return NextResponse.json({
+        success: true,
+        sessionId,
+        status: sessionStatus,
+        progress: {
+          currentStep: step,
+          completedSteps,
+          failedSteps,
+          percentage,
+        },
+      });
     }
 
-    // Save updated session
-    researchSessions.set(sessionId, session);
+    // Format 3: Status update without step (general update)
+    if (status) {
+      const updateData: Record<string, unknown> = {
+        status,
+      };
+
+      if (errors && errors.length > 0) {
+        updateData.errors = [...currentErrors, ...errors];
+      }
+
+      if (status === 'completed' || status === 'failed' || status === 'partial') {
+        updateData.completed_at = new Date().toISOString();
+      }
+
+      await supabaseAdmin
+        .from('research_sessions')
+        .update(updateData as never)
+        .eq('id', sessionId);
+
+      return NextResponse.json({
+        success: true,
+        sessionId,
+        status,
+      });
+    }
 
     return NextResponse.json({
       success: true,
       sessionId,
-      status: session.status,
-      progress: session.progress,
+      message: 'Callback received but no action taken',
     });
   } catch (error) {
     console.error('Error processing callback:', error);
@@ -120,36 +263,82 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH - Update session status (alternative to POST)
+/**
+ * PATCH /api/research/callback
+ * Alternative endpoint for updating session status
+ */
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
     const { sessionId, status, results, errors } = body;
 
-    const session = researchSessions.get(sessionId);
-    if (!session) {
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: 'Session ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Find the session
+    const { data: sessionData, error: fetchError } = await supabaseAdmin
+      .from('research_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .single();
+
+    if (fetchError || !sessionData) {
       return NextResponse.json(
         { error: 'Session not found' },
         { status: 404 }
       );
     }
 
-    // Merge updates
-    if (status) session.status = status;
-    if (results) session.results = { ...session.results, ...results };
-    if (errors) session.errors = [...session.errors, ...errors];
+    // Type the session data
+    const session = sessionData as {
+      results: unknown;
+      errors: unknown;
+    };
 
-    session.updatedAt = new Date().toISOString();
+    // Build update object
+    const updateData: Record<string, unknown> = {};
 
-    if (status === 'completed' || status === 'failed' || status === 'partial') {
-      session.completedAt = new Date().toISOString();
+    if (status) {
+      updateData.status = status;
     }
 
-    researchSessions.set(sessionId, session);
+    if (results) {
+      const currentResults = (session.results as Record<string, unknown>) || {};
+      updateData.results = { ...currentResults, ...results };
+    }
+
+    if (errors) {
+      const currentErrors = (session.errors as unknown[]) || [];
+      updateData.errors = [...currentErrors, ...errors];
+    }
+
+    if (status === 'completed' || status === 'failed' || status === 'partial') {
+      updateData.completed_at = new Date().toISOString();
+    }
+
+    // Update session
+    const { data: updatedSession, error: updateError } = await supabaseAdmin
+      .from('research_sessions')
+      .update(updateData as never)
+      .eq('id', sessionId)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('Failed to update session:', updateError);
+      return NextResponse.json(
+        { error: 'Failed to update session' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      session,
+      session: updatedSession,
     });
   } catch (error) {
     console.error('Error updating session:', error);

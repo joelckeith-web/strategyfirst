@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { researchSessions } from '../../trigger/route';
+import { supabaseAdmin } from '@/lib/supabase/client';
 
-// GET - Poll research status by session ID
+/**
+ * GET /api/research/status/[sessionId]
+ * Poll research status by session ID
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -16,14 +19,32 @@ export async function GET(
       );
     }
 
-    const session = researchSessions.get(sessionId);
+    // Fetch session from Supabase
+    const { data: sessionData, error } = await supabaseAdmin
+      .from('research_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .single();
 
-    if (!session) {
+    if (error || !sessionData) {
       return NextResponse.json(
         { error: 'Session not found' },
         { status: 404 }
       );
     }
+
+    // Type the session data
+    const session = sessionData as {
+      id: string;
+      status: string;
+      progress: unknown;
+      results: unknown;
+      errors: unknown;
+      input: unknown;
+      created_at: string;
+      updated_at: string;
+      completed_at: string | null;
+    };
 
     // Return session status and progress
     return NextResponse.json({
@@ -32,9 +53,10 @@ export async function GET(
       progress: session.progress,
       results: session.results,
       errors: session.errors,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-      completedAt: session.completedAt,
+      input: session.input,
+      createdAt: session.created_at,
+      updatedAt: session.updated_at,
+      completedAt: session.completed_at,
     });
   } catch (error) {
     console.error('Error fetching research status:', error);

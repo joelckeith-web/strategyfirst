@@ -1,66 +1,153 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
-import type {
-  ResearchInput,
-  ResearchSession,
-  TriggerResearchRequest,
-  TriggerResearchResponse,
-} from '@/types/research';
+import { supabaseAdmin } from '@/lib/supabase/client';
+import type { ResearchSessionInsert, Json } from '@/lib/supabase/types';
 
-// In-memory storage for research sessions
-// In production, replace with database (Supabase, etc.)
-const researchSessions = new Map<string, ResearchSession>();
+/**
+ * Input payload expected by the n8n webhook
+ */
+interface N8NWebhookInput {
+  // Required fields
+  businessName: string;
+  website: string;
 
-// Export for use by other routes
-export { researchSessions };
+  // Location for local SEO analysis
+  city?: string;
+  state?: string;
+  serviceAreas?: string[];
 
+  // Business context for keyword targeting
+  industry?: string;
+  primaryServices?: string[];
+
+  // Callback configuration (added by this endpoint)
+  sessionId: string;
+  callbackUrl: string;
+}
+
+/**
+ * Input from the client request
+ */
+interface TriggerRequestInput {
+  businessName: string;
+  websiteUrl?: string;
+  website?: string;
+  location?: string;
+  city?: string;
+  state?: string;
+  serviceAreas?: string[];
+  gbpUrl?: string;
+  industry?: string;
+  primaryServices?: string[];
+}
+
+/**
+ * POST /api/research/trigger
+ * Triggers the n8n research workflow
+ */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { businessName, websiteUrl, location, gbpUrl, industry } = body as ResearchInput;
+    const body = (await request.json()) as TriggerRequestInput;
+
+    // Normalize input (handle both websiteUrl and website)
+    const website = body.website || body.websiteUrl;
+    const businessName = body.businessName;
 
     // Validate required fields
-    if (!businessName || !websiteUrl) {
+    if (!businessName) {
       return NextResponse.json(
-        { error: 'Business name and website URL are required' },
+        { error: 'Business name is required' },
         { status: 400 }
       );
     }
 
-    // Generate session ID
-    const sessionId = uuidv4();
-    const now = new Date().toISOString();
+    if (!website) {
+      return NextResponse.json(
+        { error: 'Website URL is required' },
+        { status: 400 }
+      );
+    }
 
-    // Create research session
-    const session: ResearchSession = {
-      id: sessionId,
-      input: { businessName, websiteUrl, location, gbpUrl, industry },
+    // Validate website URL format
+    try {
+      new URL(website);
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid website URL format' },
+        { status: 400 }
+      );
+    }
+
+    // Parse location into city/state if provided as single string
+    let city = body.city;
+    let state = body.state;
+    if (!city && !state && body.location) {
+      const locationParts = body.location.split(',').map(p => p.trim());
+      if (locationParts.length >= 2) {
+        city = locationParts[0];
+        state = locationParts[1];
+      } else {
+        city = body.location;
+      }
+    }
+
+    // Prepare input for storage
+    const inputData = {
+      businessName,
+      website,
+      city,
+      state,
+      serviceAreas: body.serviceAreas || [],
+      industry: body.industry,
+      primaryServices: body.primaryServices || [],
+      gbpUrl: body.gbpUrl,
+    };
+
+    // Create research session in Supabase
+    const sessionInsert: ResearchSessionInsert = {
+      input: inputData as unknown as Json,
       status: 'pending',
       progress: {
         currentStep: 'initializing',
         completedSteps: [],
         failedSteps: [],
         percentage: 0,
-      },
-      results: {},
-      errors: [],
-      createdAt: now,
-      updatedAt: now,
+      } as unknown as Json,
+      results: {} as Json,
+      errors: [] as unknown as Json,
     };
 
-    // Store session
-    researchSessions.set(sessionId, session);
+    const { data: sessionData, error: insertError } = await supabaseAdmin
+      .from('research_sessions')
+      .insert(sessionInsert as never)
+      .select()
+      .single();
+
+    if (insertError || !sessionData) {
+      console.error('Failed to create research session:', insertError);
+      return NextResponse.json(
+        { error: 'Failed to create research session' },
+        { status: 500 }
+      );
+    }
+
+    const session = sessionData as { id: string };
+    const sessionId = session.id;
 
     // Check if n8n webhook URL is configured
     const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
+    const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/research/callback`;
 
     if (n8nWebhookUrl) {
-      // Trigger n8n workflow
-      const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/research/callback`;
-
-      const triggerPayload: TriggerResearchRequest = {
+      // Prepare payload for n8n
+      const n8nPayload: N8NWebhookInput = {
+        businessName,
+        website,
+        city,
+        state,
+        serviceAreas: body.serviceAreas,
+        industry: body.industry,
+        primaryServices: body.primaryServices,
         sessionId,
-        input: session.input,
         callbackUrl,
       };
 
@@ -73,40 +160,100 @@ export async function POST(request: NextRequest) {
               'X-Webhook-Secret': process.env.N8N_WEBHOOK_SECRET,
             }),
           },
-          body: JSON.stringify(triggerPayload),
+          body: JSON.stringify(n8nPayload),
         });
 
         if (!n8nResponse.ok) {
-          console.error('n8n webhook failed:', await n8nResponse.text());
-          // Update session status but don't fail - allow fallback
-          session.status = 'running';
-          session.progress.currentStep = 'n8n_triggered';
+          const errorText = await n8nResponse.text();
+          console.error('n8n webhook failed:', errorText);
+
+          // Update session with error and trigger fallback
+          await supabaseAdmin
+            .from('research_sessions')
+            .update({
+              status: 'running',
+              progress: {
+                currentStep: 'fallback_mode',
+                completedSteps: [],
+                failedSteps: [],
+                percentage: 0,
+              },
+              errors: [{ step: 'trigger', code: 'N8N_ERROR', message: errorText, recoverable: true }],
+            } as never)
+            .eq('id', sessionId);
+
+          // Trigger fallback research since n8n failed
+          triggerFallbackResearch(sessionId, inputData);
         } else {
-          const n8nResult = (await n8nResponse.json()) as TriggerResearchResponse;
-          session.status = 'running';
-          session.progress.currentStep = 'n8n_triggered';
+          const n8nResult = await n8nResponse.json();
+
+          // Update session with n8n execution info
+          await supabaseAdmin
+            .from('research_sessions')
+            .update({
+              status: 'running',
+              progress: {
+                currentStep: 'n8n_triggered',
+                completedSteps: [],
+                failedSteps: [],
+                percentage: 5,
+              },
+              n8n_execution_id: n8nResult.executionId || null,
+              callback_url: callbackUrl,
+            } as never)
+            .eq('id', sessionId);
+
           console.log('n8n workflow triggered:', n8nResult);
         }
       } catch (n8nError) {
         console.error('Failed to trigger n8n webhook:', n8nError);
-        // Fall back to direct Apify execution
-        session.progress.currentStep = 'fallback_mode';
-        triggerFallbackResearch(sessionId, session.input);
+
+        // Update session to indicate fallback mode
+        await supabaseAdmin
+          .from('research_sessions')
+          .update({
+            status: 'running',
+            progress: {
+              currentStep: 'fallback_mode',
+              completedSteps: [],
+              failedSteps: [],
+              percentage: 0,
+            },
+            errors: [{
+              step: 'trigger',
+              code: 'N8N_UNREACHABLE',
+              message: n8nError instanceof Error ? n8nError.message : 'Failed to reach n8n',
+              recoverable: true,
+            }],
+          } as never)
+          .eq('id', sessionId);
+
+        // Trigger fallback research (mock data for development)
+        triggerFallbackResearch(sessionId, inputData);
       }
     } else {
-      // No n8n configured - use fallback (direct Apify or mock)
+      // No n8n configured - use fallback
       console.log('No N8N_WEBHOOK_URL configured, using fallback research');
-      session.progress.currentStep = 'fallback_mode';
-      triggerFallbackResearch(sessionId, session.input);
-    }
 
-    // Update session
-    session.updatedAt = new Date().toISOString();
-    researchSessions.set(sessionId, session);
+      await supabaseAdmin
+        .from('research_sessions')
+        .update({
+          status: 'running',
+          progress: {
+            currentStep: 'fallback_mode',
+            completedSteps: [],
+            failedSteps: [],
+            percentage: 0,
+          },
+        } as never)
+        .eq('id', sessionId);
+
+      triggerFallbackResearch(sessionId, inputData);
+    }
 
     return NextResponse.json({
       sessionId,
-      status: session.status,
+      status: 'running',
       message: 'Research triggered successfully',
     });
   } catch (error) {
@@ -118,121 +265,163 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Fallback function when n8n is not available
-async function triggerFallbackResearch(sessionId: string, input: ResearchInput) {
-  const session = researchSessions.get(sessionId);
-  if (!session) return;
+/**
+ * Fallback research function when n8n is not available
+ * Generates mock data for development/testing
+ */
+async function triggerFallbackResearch(
+  sessionId: string,
+  input: {
+    businessName: string;
+    website: string;
+    city?: string;
+    state?: string;
+    industry?: string;
+  }
+) {
+  const steps = ['gbp', 'competitors', 'website', 'sitemap', 'seo', 'citations'];
 
-  // Update to running
-  session.status = 'running';
-  session.updatedAt = new Date().toISOString();
-  researchSessions.set(sessionId, session);
+  // Keep accumulated results in memory to avoid race conditions
+  let accumulatedResults: Record<string, unknown> = {};
 
-  // Simulate research steps (in production, call Apify directly)
-  const steps = ['gbp', 'competitors', 'website', 'sitemap', 'seo'];
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
 
-  for (const step of steps) {
-    await simulateResearchStep(sessionId, step, input);
+    // Update progress
+    await supabaseAdmin
+      .from('research_sessions')
+      .update({
+        progress: {
+          currentStep: step,
+          completedSteps: steps.slice(0, i),
+          failedSteps: [],
+          percentage: Math.round(((i + 0.5) / steps.length) * 100),
+        },
+      } as never)
+      .eq('id', sessionId);
+
+    // Simulate delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Generate mock data based on step
+    let stepData: Record<string, unknown> = {};
+    switch (step) {
+      case 'gbp':
+        stepData = {
+          gbp: {
+            name: input.businessName,
+            rating: 4.5,
+            reviewCount: 127,
+            categories: [input.industry || 'Service Provider'],
+            phone: '(555) 123-4567',
+            address: `${input.city || 'Local Area'}, ${input.state || ''}`.trim(),
+            website: input.website,
+          },
+        };
+        break;
+      case 'competitors':
+        stepData = {
+          competitors: [
+            { rank: 1, name: 'Competitor A', rating: 4.7, reviewCount: 234 },
+            { rank: 2, name: 'Competitor B', rating: 4.3, reviewCount: 156 },
+            { rank: 3, name: 'Competitor C', rating: 4.1, reviewCount: 89 },
+          ],
+        };
+        break;
+      case 'website':
+        stepData = {
+          websiteCrawl: {
+            cms: 'WordPress',
+            technologies: ['React', 'Tailwind CSS'],
+            ssl: input.website.startsWith('https'),
+            mobileResponsive: true,
+            structuredData: true,
+            schemaTypes: ['LocalBusiness', 'Organization'],
+            description: `${input.businessName} - Quality services`,
+            title: input.businessName,
+            pages: [],
+          },
+        };
+        break;
+      case 'sitemap':
+        stepData = {
+          sitemap: {
+            totalPages: 25,
+            pageTypes: { services: 5, blog: 10, about: 1, contact: 1, other: 8 },
+            hasServicePages: true,
+            hasBlog: true,
+            hasLocationPages: false,
+            recentlyUpdated: 5,
+          },
+        };
+        break;
+      case 'seo':
+        stepData = {
+          seoAudit: {
+            score: 75,
+            mobile: { score: 80, usability: true, viewport: true, textSize: true },
+            performance: { score: 70, lcp: 2800, fid: 50, cls: 0.1, ttfb: 400 },
+            technical: {
+              ssl: true,
+              canonicalTag: true,
+              robotsTxt: true,
+              sitemap: true,
+              structuredData: ['LocalBusiness'],
+              metaDescription: true,
+              h1Tags: 1,
+            },
+            content: {
+              wordCount: 1500,
+              headings: 8,
+              images: 12,
+              imagesWithAlt: 10,
+              internalLinks: 15,
+              externalLinks: 3,
+            },
+          },
+        };
+        break;
+      case 'citations':
+        stepData = {
+          citations: [
+            { source: 'Yelp', found: true, napConsistent: true },
+            { source: 'BBB', found: true, napConsistent: false },
+            { source: 'Yellow Pages', found: false },
+          ],
+        };
+        break;
+    }
+
+    // Accumulate results in memory
+    accumulatedResults = { ...accumulatedResults, ...stepData };
+
+    // Update results
+    await supabaseAdmin
+      .from('research_sessions')
+      .update({
+        results: accumulatedResults,
+        progress: {
+          currentStep: step,
+          completedSteps: [...steps.slice(0, i), step],
+          failedSteps: [],
+          percentage: Math.round(((i + 1) / steps.length) * 100),
+        },
+      } as never)
+      .eq('id', sessionId);
   }
 
   // Mark complete
-  const finalSession = researchSessions.get(sessionId);
-  if (finalSession) {
-    finalSession.status = 'completed';
-    finalSession.completedAt = new Date().toISOString();
-    finalSession.progress.percentage = 100;
-    finalSession.progress.currentStep = 'complete';
-    researchSessions.set(sessionId, finalSession);
-  }
-}
-
-async function simulateResearchStep(sessionId: string, step: string, input: ResearchInput) {
-  const session = researchSessions.get(sessionId);
-  if (!session) return;
-
-  // Update progress
-  session.progress.currentStep = step;
-  session.progress.percentage = Math.min(
-    ((session.progress.completedSteps.length + 1) / 5) * 100,
-    100
-  );
-  session.updatedAt = new Date().toISOString();
-  researchSessions.set(sessionId, session);
-
-  // Simulate delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  // Generate mock data based on step
-  switch (step) {
-    case 'gbp':
-      session.results.gbp = {
-        name: input.businessName,
-        rating: 4.5,
-        reviewCount: 127,
-        categories: ['Service Provider'],
-        phone: '(555) 123-4567',
-        address: input.location || 'Local Area',
-        website: input.websiteUrl,
-      };
-      break;
-    case 'competitors':
-      session.results.competitors = [
-        { rank: 1, name: 'Competitor A', rating: 4.7, reviewCount: 234 },
-        { rank: 2, name: 'Competitor B', rating: 4.3, reviewCount: 156 },
-        { rank: 3, name: 'Competitor C', rating: 4.1, reviewCount: 89 },
-      ];
-      break;
-    case 'website':
-      session.results.websiteCrawl = {
-        cms: 'WordPress',
-        technologies: ['React', 'Tailwind CSS'],
-        ssl: true,
-        mobileResponsive: true,
-        structuredData: true,
-        schemaTypes: ['LocalBusiness', 'Organization'],
-        description: `${input.businessName} - Quality services in ${input.location || 'your area'}`,
-        title: input.businessName,
-        pages: [],
-      };
-      break;
-    case 'sitemap':
-      session.results.sitemap = {
-        totalPages: 25,
-        pageTypes: { services: 5, blog: 10, about: 1, contact: 1, other: 8 },
-        hasServicePages: true,
-        hasBlog: true,
-        hasLocationPages: false,
-        recentlyUpdated: 5,
-      };
-      break;
-    case 'seo':
-      session.results.seoAudit = {
-        score: 75,
-        mobile: { score: 80, usability: true, viewport: true, textSize: true },
-        performance: { score: 70, lcp: 2800, fid: 50, cls: 0.1, ttfb: 400 },
-        technical: {
-          ssl: true,
-          canonicalTag: true,
-          robotsTxt: true,
-          sitemap: true,
-          structuredData: ['LocalBusiness'],
-          metaDescription: true,
-          h1Tags: 1,
-        },
-        content: {
-          wordCount: 1500,
-          headings: 8,
-          images: 12,
-          imagesWithAlt: 10,
-          internalLinks: 15,
-          externalLinks: 3,
-        },
-      };
-      break;
-  }
-
-  // Mark step completed
-  session.progress.completedSteps.push(step);
-  session.updatedAt = new Date().toISOString();
-  researchSessions.set(sessionId, session);
+  await supabaseAdmin
+    .from('research_sessions')
+    .update({
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      progress: {
+        currentStep: 'complete',
+        completedSteps: steps,
+        failedSteps: [],
+        percentage: 100,
+      },
+    } as never)
+    .eq('id', sessionId);
 }
