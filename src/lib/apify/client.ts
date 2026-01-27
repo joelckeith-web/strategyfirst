@@ -39,7 +39,7 @@ class ApifyClient {
     input: TInput,
     options: ApifyActorCallOptions = {}
   ): Promise<ApifyRunResult> {
-    const { timeout = 300, memory = 1024, build } = options;
+    const { timeout = 300, memory = 8192, build } = options;
 
     const queryParams = new URLSearchParams({
       timeout: timeout.toString(),

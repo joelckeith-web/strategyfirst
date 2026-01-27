@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Run research using direct Apify API calls
+ * Run research using direct Apify API calls - ALL ACTORS RUN IN PARALLEL
  */
 async function triggerApifyResearch(
   sessionId: string,
@@ -191,275 +191,263 @@ async function triggerApifyResearch(
     gbpUrl?: string;
   }
 ) {
-  const steps = ['gbp', 'competitors', 'website', 'sitemap', 'seo', 'citations'];
-  let accumulatedResults: Record<string, unknown> = {};
+  const accumulatedResults: Record<string, unknown> = {};
   const failedSteps: string[] = [];
   const completedSteps: string[] = [];
   const errors: Array<{ step: string; code: string; message: string }> = [];
 
   const location = [input.city, input.state].filter(Boolean).join(', ') || 'United States';
 
-  // Helper to update progress
-  async function updateProgress(currentStep: string, percentage: number) {
-    await supabaseAdmin
-      .from('research_sessions')
-      .update({
-        progress: {
-          currentStep,
-          completedSteps: [...completedSteps],
-          failedSteps: [...failedSteps],
-          percentage,
-        },
-        results: accumulatedResults,
-        errors,
-      } as never)
-      .eq('id', sessionId);
-  }
+  // Update progress to show parallel execution
+  await supabaseAdmin
+    .from('research_sessions')
+    .update({
+      progress: {
+        currentStep: 'parallel_research',
+        completedSteps: [],
+        failedSteps: [],
+        percentage: 10,
+      },
+    } as never)
+    .eq('id', sessionId);
 
-  // Step 1: GBP Data
-  try {
-    await updateProgress('gbp', 10);
+  console.log(`Starting parallel Apify research for session ${sessionId}`);
 
-    let gbpResult;
-    if (input.gbpUrl) {
-      // Use provided GBP URL
-      gbpResult = await getGooglePlaceByUrl(input.gbpUrl);
-    } else {
-      // Search by business name and location
-      gbpResult = await searchGooglePlaces(input.businessName, location, { maxResults: 1 });
-    }
+  // Define all research tasks to run in parallel
+  const gbpTask = async () => {
+    try {
+      let gbpResult;
+      if (input.gbpUrl) {
+        gbpResult = await getGooglePlaceByUrl(input.gbpUrl);
+      } else {
+        gbpResult = await searchGooglePlaces(input.businessName, location, { maxResults: 1 });
+      }
 
-    if (gbpResult.success && gbpResult.places.length > 0) {
-      const place = gbpResult.places[0];
-      const metrics = extractGbpMetrics(place);
-
-      accumulatedResults.gbp = {
-        name: metrics.name,
-        rating: metrics.rating,
-        reviewCount: metrics.totalReviews,
-        categories: metrics.categories,
-        phone: metrics.phone,
-        address: metrics.address,
-        website: metrics.website,
-        url: metrics.url,
-        photoCount: metrics.photoCount,
-        responseRate: metrics.responseRate,
-        recentReviews: metrics.recentReviews,
-      };
-      completedSteps.push('gbp');
-    } else {
-      failedSteps.push('gbp');
-      errors.push({ step: 'gbp', code: 'NO_RESULTS', message: gbpResult.error || 'No GBP data found' });
-    }
-  } catch (err) {
-    console.error('GBP research failed:', err);
-    failedSteps.push('gbp');
-    errors.push({ step: 'gbp', code: 'ERROR', message: err instanceof Error ? err.message : 'Unknown error' });
-  }
-
-  // Step 2: Competitors
-  try {
-    await updateProgress('competitors', 25);
-
-    // Search for competitors using industry or inferred business type
-    const searchQuery = input.industry || input.businessName.split(' ').slice(-1)[0] || 'services';
-    const competitorResult = await findCompetitors(searchQuery, location, 5);
-
-    if (competitorResult.success && competitorResult.places.length > 0) {
-      const competitors = competitorResult.places.map((place, index) => {
+      if (gbpResult.success && gbpResult.places.length > 0) {
+        const place = gbpResult.places[0];
         const metrics = extractGbpMetrics(place);
         return {
-          rank: index + 1,
-          name: metrics.name,
-          rating: metrics.rating,
-          reviewCount: metrics.totalReviews,
-          website: metrics.website,
-          phone: metrics.phone,
-          address: metrics.address,
-          categories: metrics.categories,
-          url: metrics.url,
+          success: true,
+          data: {
+            name: metrics.name,
+            rating: metrics.rating,
+            reviewCount: metrics.totalReviews,
+            categories: metrics.categories,
+            phone: metrics.phone,
+            address: metrics.address,
+            website: metrics.website,
+            url: metrics.url,
+            photoCount: metrics.photoCount,
+            responseRate: metrics.responseRate,
+            recentReviews: metrics.recentReviews,
+          },
         };
-      });
-
-      accumulatedResults.competitors = competitors;
-      completedSteps.push('competitors');
-    } else {
-      failedSteps.push('competitors');
-      errors.push({ step: 'competitors', code: 'NO_RESULTS', message: competitorResult.error || 'No competitors found' });
+      }
+      return { success: false, error: gbpResult.error || 'No GBP data found' };
+    } catch (err) {
+      console.error('GBP research failed:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
-  } catch (err) {
-    console.error('Competitor research failed:', err);
+  };
+
+  const competitorTask = async () => {
+    try {
+      const searchQuery = input.industry || input.businessName.split(' ').slice(-1)[0] || 'services';
+      const competitorResult = await findCompetitors(searchQuery, location, 5);
+
+      if (competitorResult.success && competitorResult.places.length > 0) {
+        const competitors = competitorResult.places.map((place, index) => {
+          const metrics = extractGbpMetrics(place);
+          return {
+            rank: index + 1,
+            name: metrics.name,
+            rating: metrics.rating,
+            reviewCount: metrics.totalReviews,
+            website: metrics.website,
+            phone: metrics.phone,
+            address: metrics.address,
+            categories: metrics.categories,
+            url: metrics.url,
+          };
+        });
+        return { success: true, data: competitors };
+      }
+      return { success: false, error: competitorResult.error || 'No competitors found' };
+    } catch (err) {
+      console.error('Competitor research failed:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  };
+
+  const websiteTask = async () => {
+    try {
+      const crawlResult = await crawlWebsite(input.website, { maxPages: 20, maxDepth: 3 });
+
+      if (crawlResult.success && crawlResult.pages.length > 0) {
+        const homePage = crawlResult.pages.find(p => {
+          try {
+            const url = new URL(p.url);
+            return url.pathname === '/' || url.pathname === '';
+          } catch {
+            return false;
+          }
+        }) || crawlResult.pages[0];
+
+        const allHtml = crawlResult.pages.map(p => p.html || '').join(' ');
+
+        let cms = 'Unknown';
+        if (allHtml.includes('wp-content') || allHtml.includes('wordpress')) cms = 'WordPress';
+        else if (allHtml.includes('wix.com')) cms = 'Wix';
+        else if (allHtml.includes('squarespace')) cms = 'Squarespace';
+        else if (allHtml.includes('shopify')) cms = 'Shopify';
+
+        const hasStructuredData = allHtml.includes('application/ld+json');
+        const schemaTypes: string[] = [];
+        if (allHtml.includes('LocalBusiness')) schemaTypes.push('LocalBusiness');
+        if (allHtml.includes('Organization')) schemaTypes.push('Organization');
+        if (allHtml.includes('WebSite')) schemaTypes.push('WebSite');
+
+        return {
+          success: true,
+          data: {
+            cms,
+            ssl: input.website.startsWith('https'),
+            mobileResponsive: true,
+            structuredData: hasStructuredData,
+            schemaTypes,
+            title: homePage?.title || input.businessName,
+            description: homePage?.metadata?.description || '',
+            totalPages: crawlResult.totalPages,
+            pages: crawlResult.pages.slice(0, 10).map(p => ({
+              url: p.url,
+              title: p.title || '',
+              description: p.metadata?.description || '',
+            })),
+          },
+        };
+      }
+      return { success: false, error: crawlResult.error || 'Website crawl failed' };
+    } catch (err) {
+      console.error('Website crawl failed:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  };
+
+  const sitemapTask = async () => {
+    try {
+      const sitemapResult = await extractSitemap(input.website);
+
+      if (sitemapResult.success && sitemapResult.urls.length > 0) {
+        const analysis = analyzeSitemapStructure(sitemapResult.urls);
+        return {
+          success: true,
+          data: {
+            totalPages: analysis.totalPages,
+            pageTypes: analysis.pageTypes,
+            hasServicePages: analysis.hasServicePages,
+            hasBlog: analysis.hasBlog,
+            hasLocationPages: analysis.hasLocationPages,
+            recentlyUpdated: analysis.recentlyUpdated,
+            urls: sitemapResult.urls.slice(0, 50).map(u => u.url),
+          },
+        };
+      }
+      // No sitemap is okay - return empty data
+      return {
+        success: true,
+        data: {
+          totalPages: 0,
+          pageTypes: {},
+          hasServicePages: false,
+          hasBlog: false,
+          hasLocationPages: false,
+          recentlyUpdated: 0,
+          error: 'No sitemap found',
+        },
+      };
+    } catch (err) {
+      console.error('Sitemap extraction failed:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  };
+
+  // Run ALL tasks in parallel for maximum speed
+  console.log('Running all Apify actors in parallel...');
+  const [gbpRes, competitorRes, websiteRes, sitemapRes] = await Promise.all([
+    gbpTask(),
+    competitorTask(),
+    websiteTask(),
+    sitemapTask(),
+  ]);
+
+  // Process GBP results
+  if (gbpRes.success) {
+    accumulatedResults.gbp = gbpRes.data;
+    completedSteps.push('gbp');
+  } else {
+    failedSteps.push('gbp');
+    errors.push({ step: 'gbp', code: 'ERROR', message: gbpRes.error || 'Unknown error' });
+  }
+
+  // Process competitor results
+  if (competitorRes.success) {
+    accumulatedResults.competitors = competitorRes.data;
+    completedSteps.push('competitors');
+  } else {
     failedSteps.push('competitors');
-    errors.push({ step: 'competitors', code: 'ERROR', message: err instanceof Error ? err.message : 'Unknown error' });
+    errors.push({ step: 'competitors', code: 'ERROR', message: competitorRes.error || 'Unknown error' });
   }
 
-  // Step 3: Website Crawl
-  try {
-    await updateProgress('website', 45);
-
-    const crawlResult = await crawlWebsite(input.website, { maxPages: 10, maxDepth: 2 });
-
-    if (crawlResult.success && crawlResult.pages.length > 0) {
-      // Analyze crawled pages
-      const homePage = crawlResult.pages.find(p => {
-        try {
-          const url = new URL(p.url);
-          return url.pathname === '/' || url.pathname === '';
-        } catch {
-          return false;
-        }
-      }) || crawlResult.pages[0];
-
-      // Detect CMS and technologies from crawled data
-      const allText = crawlResult.pages.map(p => p.text || '').join(' ');
-      const allHtml = crawlResult.pages.map(p => p.html || '').join(' ');
-
-      let cms = 'Unknown';
-      if (allHtml.includes('wp-content') || allHtml.includes('wordpress')) cms = 'WordPress';
-      else if (allHtml.includes('wix.com')) cms = 'Wix';
-      else if (allHtml.includes('squarespace')) cms = 'Squarespace';
-      else if (allHtml.includes('shopify')) cms = 'Shopify';
-
-      // Check for structured data
-      const hasStructuredData = allHtml.includes('application/ld+json');
-      const schemaTypes: string[] = [];
-      if (allHtml.includes('LocalBusiness')) schemaTypes.push('LocalBusiness');
-      if (allHtml.includes('Organization')) schemaTypes.push('Organization');
-      if (allHtml.includes('WebSite')) schemaTypes.push('WebSite');
-
-      accumulatedResults.websiteCrawl = {
-        cms,
-        ssl: input.website.startsWith('https'),
-        mobileResponsive: true, // Assume true for now - would need more analysis
-        structuredData: hasStructuredData,
-        schemaTypes,
-        title: homePage?.title || input.businessName,
-        description: homePage?.metadata?.description || '',
-        totalPages: crawlResult.totalPages,
-        pages: crawlResult.pages.slice(0, 10).map(p => ({
-          url: p.url,
-          title: p.title || '',
-          description: p.metadata?.description || '',
-        })),
-      };
-      completedSteps.push('website');
-    } else {
-      failedSteps.push('website');
-      errors.push({ step: 'website', code: 'CRAWL_FAILED', message: crawlResult.error || 'Website crawl failed' });
-    }
-  } catch (err) {
-    console.error('Website crawl failed:', err);
+  // Process website results
+  if (websiteRes.success) {
+    accumulatedResults.websiteCrawl = websiteRes.data;
+    completedSteps.push('website');
+  } else {
     failedSteps.push('website');
-    errors.push({ step: 'website', code: 'ERROR', message: err instanceof Error ? err.message : 'Unknown error' });
+    errors.push({ step: 'website', code: 'ERROR', message: websiteRes.error || 'Unknown error' });
   }
 
-  // Step 4: Sitemap
-  try {
-    await updateProgress('sitemap', 60);
-
-    const sitemapResult = await extractSitemap(input.website);
-
-    if (sitemapResult.success && sitemapResult.urls.length > 0) {
-      const analysis = analyzeSitemapStructure(sitemapResult.urls);
-
-      accumulatedResults.sitemap = {
-        totalPages: analysis.totalPages,
-        pageTypes: analysis.pageTypes,
-        hasServicePages: analysis.hasServicePages,
-        hasBlog: analysis.hasBlog,
-        hasLocationPages: analysis.hasLocationPages,
-        recentlyUpdated: analysis.recentlyUpdated,
-        urls: sitemapResult.urls.slice(0, 50).map(u => u.url),
-      };
-      completedSteps.push('sitemap');
-    } else {
-      // Sitemap not found is not necessarily an error
-      accumulatedResults.sitemap = {
-        totalPages: 0,
-        pageTypes: {},
-        hasServicePages: false,
-        hasBlog: false,
-        hasLocationPages: false,
-        recentlyUpdated: 0,
-        error: 'No sitemap found',
-      };
-      completedSteps.push('sitemap');
-    }
-  } catch (err) {
-    console.error('Sitemap extraction failed:', err);
+  // Process sitemap results
+  if (sitemapRes.success) {
+    accumulatedResults.sitemap = sitemapRes.data;
+    completedSteps.push('sitemap');
+  } else {
     failedSteps.push('sitemap');
-    errors.push({ step: 'sitemap', code: 'ERROR', message: err instanceof Error ? err.message : 'Unknown error' });
+    errors.push({ step: 'sitemap', code: 'ERROR', message: sitemapRes.error || 'Unknown error' });
   }
 
-  // Step 5: SEO Audit (derived from crawl data)
-  try {
-    await updateProgress('seo', 80);
+  // Generate SEO audit from collected data
+  const websiteData = accumulatedResults.websiteCrawl as Record<string, unknown> | undefined;
+  accumulatedResults.seoAudit = {
+    score: completedSteps.includes('website') ? 70 : 50,
+    mobile: { score: 75, usability: true, viewport: true, textSize: true },
+    performance: { score: 70, lcp: 2500, fid: 100, cls: 0.1, ttfb: 500 },
+    technical: {
+      ssl: input.website.startsWith('https'),
+      canonicalTag: true,
+      robotsTxt: true,
+      sitemap: completedSteps.includes('sitemap'),
+      structuredData: websiteData?.schemaTypes || [],
+      metaDescription: !!websiteData?.description,
+      h1Tags: 1,
+    },
+    content: { wordCount: 1500, headings: 8, images: 12, imagesWithAlt: 10, internalLinks: 15, externalLinks: 3 },
+  };
+  completedSteps.push('seo');
 
-    // Generate SEO metrics from crawled data
-    const websiteData = accumulatedResults.websiteCrawl as Record<string, unknown> | undefined;
+  // Generate citation placeholders
+  accumulatedResults.citations = [
+    { source: 'Google Business Profile', found: completedSteps.includes('gbp'), napConsistent: true },
+    { source: 'Yelp', found: false, napConsistent: null },
+    { source: 'Facebook', found: false, napConsistent: null },
+    { source: 'BBB', found: false, napConsistent: null },
+    { source: 'Yellow Pages', found: false, napConsistent: null },
+  ];
+  completedSteps.push('citations');
 
-    accumulatedResults.seoAudit = {
-      score: completedSteps.includes('website') ? 70 : 50,
-      mobile: {
-        score: 75,
-        usability: true,
-        viewport: true,
-        textSize: true,
-      },
-      performance: {
-        score: 70,
-        lcp: 2500,
-        fid: 100,
-        cls: 0.1,
-        ttfb: 500,
-      },
-      technical: {
-        ssl: input.website.startsWith('https'),
-        canonicalTag: true,
-        robotsTxt: true,
-        sitemap: completedSteps.includes('sitemap'),
-        structuredData: websiteData?.schemaTypes || [],
-        metaDescription: !!websiteData?.description,
-        h1Tags: 1,
-      },
-      content: {
-        wordCount: 1500,
-        headings: 8,
-        images: 12,
-        imagesWithAlt: 10,
-        internalLinks: 15,
-        externalLinks: 3,
-      },
-    };
-    completedSteps.push('seo');
-  } catch (err) {
-    console.error('SEO audit failed:', err);
-    failedSteps.push('seo');
-    errors.push({ step: 'seo', code: 'ERROR', message: err instanceof Error ? err.message : 'Unknown error' });
-  }
-
-  // Step 6: Citations (placeholder for now - would need a citation checker actor)
-  try {
-    await updateProgress('citations', 95);
-
-    // Placeholder citation data - would integrate with a citation checking service
-    accumulatedResults.citations = [
-      { source: 'Google Business Profile', found: completedSteps.includes('gbp'), napConsistent: true },
-      { source: 'Yelp', found: false, napConsistent: null },
-      { source: 'Facebook', found: false, napConsistent: null },
-      { source: 'BBB', found: false, napConsistent: null },
-      { source: 'Yellow Pages', found: false, napConsistent: null },
-    ];
-    completedSteps.push('citations');
-  } catch (err) {
-    console.error('Citation check failed:', err);
-    failedSteps.push('citations');
-    errors.push({ step: 'citations', code: 'ERROR', message: err instanceof Error ? err.message : 'Unknown error' });
-  }
-
-  // Final update - mark complete
-  const finalStatus = failedSteps.length === steps.length ? 'failed' :
-                      failedSteps.length > 0 ? 'completed' : 'completed';
+  // Final update
+  const allSteps = ['gbp', 'competitors', 'website', 'sitemap', 'seo', 'citations'];
+  const finalStatus = failedSteps.length === 4 ? 'failed' : 'completed'; // 4 = all Apify tasks failed
 
   await supabaseAdmin
     .from('research_sessions')

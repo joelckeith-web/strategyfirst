@@ -54,7 +54,7 @@ export async function extractSitemap(
     const { items } = await client.callActor<SitemapExtractorInput, SitemapExtractorResult>(
       ACTOR_ID,
       input,
-      { waitForFinish: 120 } // 2 minutes timeout
+      { waitForFinish: 120, memory: 8192 } // 2 minutes timeout, 8GB memory
     );
 
     return {

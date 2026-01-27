@@ -39,7 +39,7 @@ export async function getGooglePlaceByUrl(
     const { items } = await client.callActor<GooglePlacesCrawlerInput, GooglePlacesResult>(
       ACTOR_ID,
       input,
-      { waitForFinish: 300 } // 5 minutes timeout
+      { waitForFinish: 300, memory: 8192 } // 5 minutes timeout, 8GB memory
     );
 
     return {
@@ -83,7 +83,7 @@ export async function searchGooglePlaces(
     const { items } = await client.callActor<GooglePlacesCrawlerInput, GooglePlacesResult>(
       ACTOR_ID,
       input,
-      { waitForFinish: 600 } // 10 minutes timeout
+      { waitForFinish: 600, memory: 8192 } // 10 minutes timeout, 8GB memory
     );
 
     return {

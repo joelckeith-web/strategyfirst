@@ -47,7 +47,7 @@ export async function crawlWebsite(
     const { items } = await client.callActor<WebsiteCrawlerInput, WebsiteCrawlerResult>(
       ACTOR_ID,
       input,
-      { waitForFinish: 600 } // 10 minutes timeout
+      { waitForFinish: 600, memory: 8192 } // 10 minutes timeout, 8GB memory
     );
 
     return {
