@@ -459,7 +459,7 @@ async function triggerApifyResearch(
         completedSteps,
         failedSteps,
         percentage: 50,
-        phase: 'Phase 3: Deep website crawl (this may take a moment)',
+        phase: 'Phase 3: Deep website crawl (2-5 minutes for full analysis)',
       },
     } as never)
     .eq('id', sessionId);
@@ -471,9 +471,10 @@ async function triggerApifyResearch(
 
   const websiteTask = async () => {
     try {
-      // Use lightweight mode for faster initial research (~30-60s vs 2-5min)
-      // This crawls 10 pages at depth 2 using cheerio (HTTP-based, no browser)
-      const crawlResult = await crawlWebsite(input.website, { lightweight: true });
+      // Use full mode with Playwright for accurate structured data detection
+      // This crawls 30 pages at depth 3 using playwright:firefox (~2-5min)
+      // Required for JavaScript-heavy sites (Wix, Squarespace, etc.) that inject schema dynamically
+      const crawlResult = await crawlWebsite(input.website, { lightweight: false });
 
       if (crawlResult.success && crawlResult.pages.length > 0) {
         const homePage = crawlResult.pages.find(p => {
