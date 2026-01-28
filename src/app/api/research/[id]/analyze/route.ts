@@ -93,6 +93,14 @@ export async function POST(
       } as never)
       .eq('id', sessionId);
 
+    // Check if manual input is available (from verification)
+    const manualInput = results.manualInput as Record<string, Record<string, unknown>> | undefined;
+    const hasManualInput = manualInput && Object.keys(manualInput).length > 0;
+
+    if (hasManualInput) {
+      console.log('Re-analyzing with manual input from verification');
+    }
+
     // Build analysis input
     const analysisInput: AIAnalysisInput = {
       sessionId,
@@ -107,6 +115,7 @@ export async function POST(
       competitors: results.competitors as Record<string, unknown>[] | undefined,
       seoAudit: results.seoAudit as Record<string, unknown> | undefined,
       citations: results.citations as Record<string, unknown>[] | undefined,
+      manualInput,
     };
 
     // Run the analysis

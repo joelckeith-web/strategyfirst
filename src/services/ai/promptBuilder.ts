@@ -954,6 +954,15 @@ export function buildDataContext(input: AIAnalysisInput): string {
     context += '## Business Citations\nNo citation data available - recommend citation audit.\n\n';
   }
 
+  // Manual input from verification (user-provided data)
+  if (input.manualInput && Object.keys(input.manualInput).length > 0) {
+    context += '## USER-VERIFIED DATA (HIGH CONFIDENCE)\n';
+    context += '**IMPORTANT:** The following data was provided directly by the business owner/agency.\n';
+    context += 'Use this data with HIGH CONFIDENCE (0.95+) for the corresponding fields.\n';
+    context += 'This overrides any conflicting inferences from other data sources.\n\n';
+    context += '```json\n' + JSON.stringify(input.manualInput, null, 2) + '\n```\n\n';
+  }
+
   // Detailed analysis instructions
   context += '---\n\n';
   context += '# Analysis Instructions\n\n';

@@ -1,7 +1,7 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { use, useEffect, useState, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
@@ -318,32 +318,15 @@ export default function ResearchResultsPage({
 }) {
   const { id: sessionId } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [hasTriggeredReanalysis, setHasTriggeredReanalysis] = useState(false);
 
-  useEffect(() => {
-    async function fetchResults() {
-      try {
-        const response = await fetch(`/api/research/status/${sessionId}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch results');
-        }
-        const data = await response.json();
-        setSessionData(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load results');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchResults();
-  }, [sessionId]);
-
-  const runAIAnalysis = async () => {
+  const runAIAnalysis = useCallback(async () => {
     setIsAnalyzing(true);
     setAnalysisError(null);
 
@@ -364,12 +347,45 @@ export default function ResearchResultsPage({
         const updatedData = await statusResponse.json();
         setSessionData(updatedData);
       }
+
+      // Clear the reanalyze param from URL after successful analysis
+      if (searchParams.get('reanalyze') === 'true') {
+        router.replace(`/research/${sessionId}/results`);
+      }
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : 'Failed to run analysis');
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [sessionId, searchParams, router]);
+
+  useEffect(() => {
+    async function fetchResults() {
+      try {
+        const response = await fetch(`/api/research/status/${sessionId}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch results');
+        }
+        const data = await response.json();
+        setSessionData(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load results');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchResults();
+  }, [sessionId]);
+
+  // Auto-trigger re-analysis when coming from verification page
+  useEffect(() => {
+    const shouldReanalyze = searchParams.get('reanalyze') === 'true';
+    if (shouldReanalyze && !isLoading && sessionData && !isAnalyzing && !hasTriggeredReanalysis) {
+      setHasTriggeredReanalysis(true);
+      runAIAnalysis();
+    }
+  }, [searchParams, isLoading, sessionData, isAnalyzing, hasTriggeredReanalysis, runAIAnalysis]);
 
   if (isLoading) {
     return (
@@ -454,12 +470,19 @@ export default function ResearchResultsPage({
         </CardHeader>
         <CardBody>
           {isAnalyzing && (
-            <div className="flex items-center justify-center py-8">
-              <svg className="w-6 h-6 text-blue-500 animate-spin mr-3" fill="none" viewBox="0 0 24 24">
+            <div className="flex flex-col items-center justify-center py-8">
+              <svg className="w-8 h-8 text-blue-500 animate-spin mb-3" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              <span className="text-gray-600">Analyzing with AI... This may take 30-60 seconds.</span>
+              {hasTriggeredReanalysis ? (
+                <>
+                  <span className="text-gray-800 font-medium">Re-analyzing with your verified data...</span>
+                  <span className="text-gray-500 text-sm mt-1">This will produce higher confidence recommendations.</span>
+                </>
+              ) : (
+                <span className="text-gray-600">Analyzing with AI... This may take 30-60 seconds.</span>
+              )}
             </div>
           )}
 
@@ -505,7 +528,7 @@ export default function ResearchResultsPage({
                     <InfoTooltip text="Fields with 70%+ confidence that can be used directly. These had strong supporting data from GBP, website, or competitors." />
                   </p>
                 </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
+                <div className="text-center p-4 bg-gray-50 rounded-lg relative">
                   <p className="text-3xl font-bold text-amber-600">
                     {aiAnalysis.fieldsWithLowConfidence}
                   </p>
@@ -513,6 +536,15 @@ export default function ResearchResultsPage({
                     Need Verification
                     <InfoTooltip text="Fields with under 40% confidence that should be verified with the client. These were educated guesses due to limited data." />
                   </p>
+                  {aiAnalysis.fieldsWithLowConfidence > 0 && (
+                    <Button
+                      onClick={() => router.push(`/research/${sessionId}/verify`)}
+                      variant="outline"
+                      className="mt-2 text-xs px-2 py-1"
+                    >
+                      Fill Missing Data →
+                    </Button>
+                  )}
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <p className="text-3xl font-bold text-gray-600">
@@ -524,6 +556,26 @@ export default function ResearchResultsPage({
                   </p>
                 </div>
               </div>
+
+              {/* Verification CTA Banner */}
+              {aiAnalysis.fieldsWithLowConfidence > 5 && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-amber-800">
+                      {aiAnalysis.fieldsWithLowConfidence} fields need verification
+                    </p>
+                    <p className="text-sm text-amber-600">
+                      Answer a few questions to improve analysis accuracy and get more specific recommendations.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => router.push(`/research/${sessionId}/verify`)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                  >
+                    Verify Now
+                  </Button>
+                </div>
+              )}
 
               {/* SERP Gap Analysis - Quick Wins */}
               {aiAnalysis.insights?.serpGapAnalysis?.quickWinActions && aiAnalysis.insights.serpGapAnalysis.quickWinActions.length > 0 && (

@@ -821,6 +821,9 @@ export interface AIAnalysisInput {
   competitors?: Record<string, unknown>[];
   seoAudit?: Record<string, unknown>;
   citations?: Record<string, unknown>[];
+
+  // Manual input from verification (user-provided data)
+  manualInput?: Record<string, Record<string, unknown>>;
 }
 
 /**
