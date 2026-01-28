@@ -577,20 +577,44 @@ export default function ResearchResultsPage({
             )}
 
             {/* Your Position */}
-            {gbp && competitors && competitors.length > 0 && (
-              <div className="p-4 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Your position:</strong> Rating {gbp.rating} with {gbp.reviewCount} reviews
-                  {gbp.rating >= (competitors[0]?.rating || 0) ? (
-                    <span className="ml-2 text-green-600">Leading the competition!</span>
-                  ) : (
-                    <span className="ml-2 text-amber-600">
-                      {(competitors[0]?.rating - gbp.rating).toFixed(1)} stars behind the leader
-                    </span>
-                  )}
-                </p>
-              </div>
-            )}
+            {gbp && competitors && competitors.length > 0 && (() => {
+              // Calculate prominence score: rating × sqrt(reviews)
+              const yourScore = gbp.rating * Math.sqrt(gbp.reviewCount);
+              const topScore = competitors[0]?.prominenceScore || (competitors[0]?.rating * Math.sqrt(competitors[0]?.reviewCount));
+              const yourRank = competitors.filter(c => (c.prominenceScore || 0) > yourScore).length + 1;
+              const totalCompetitors = competitors.length;
+
+              return (
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-800">
+                        <strong>Your position:</strong> Rating {gbp.rating} with {gbp.reviewCount} reviews
+                      </p>
+                      <p className="text-xs text-blue-600 mt-1">
+                        Prominence score: {yourScore.toFixed(1)} (rating × √reviews)
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      {yourScore >= topScore ? (
+                        <span className="inline-flex items-center px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                          #1 Market Leader
+                        </span>
+                      ) : (
+                        <div>
+                          <span className="inline-flex items-center px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
+                            #{yourRank} of {totalCompetitors + 1}
+                          </span>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {((topScore - yourScore) / topScore * 100).toFixed(0)}% behind leader
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </CardBody>
         </Card>
       ) : null}
