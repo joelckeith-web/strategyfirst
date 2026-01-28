@@ -7,6 +7,8 @@ export interface CrawlWebsiteOptions {
   maxDepth?: number;
   includePatterns?: string[];
   excludePatterns?: string[];
+  /** Use lightweight mode for faster crawling (fewer pages, HTTP-based) */
+  lightweight?: boolean;
 }
 
 export interface CrawlWebsiteOutput {
@@ -18,6 +20,10 @@ export interface CrawlWebsiteOutput {
 
 /**
  * Crawl a website and extract content
+ *
+ * Performance options:
+ * - lightweight: true = 10 pages, depth 2, cheerio (fast HTTP scraper) - ~30-60s
+ * - lightweight: false = 30 pages, depth 3, playwright:firefox - ~2-5min
  */
 export async function crawlWebsite(
   url: string,
@@ -25,14 +31,32 @@ export async function crawlWebsite(
 ): Promise<CrawlWebsiteOutput> {
   const client = getApifyClient();
 
+  // Lightweight mode for faster initial analysis
+  const isLightweight = options.lightweight ?? false;
+  const maxPages = options.maxPages || (isLightweight ? 10 : 30);
+  const maxDepth = options.maxDepth || (isLightweight ? 2 : 3);
+
+  // Use cheerio for lightweight (HTTP-based, very fast)
+  // Use playwright:firefox for full crawl (lighter than chrome, still handles JS)
+  const crawlerType = isLightweight ? 'cheerio' : 'playwright:firefox';
+
+  // Memory: 4GB for cheerio, 16GB for playwright (reduced from 32GB)
+  const memory = isLightweight ? 4096 : 16384;
+
+  // Timeout: 2 min for lightweight, 5 min for full (reduced from 15)
+  const timeout = isLightweight ? 120 : 300;
+
   const input: WebsiteCrawlerInput = {
     startUrls: [{ url }],
-    maxCrawlPages: options.maxPages || 50,
-    maxCrawlDepth: options.maxDepth || 3,
-    crawlerType: 'playwright:chrome',
+    maxCrawlPages: maxPages,
+    maxCrawlDepth: maxDepth,
+    crawlerType,
     proxyConfiguration: {
       useApifyProxy: true,
     },
+    // Always save HTML for structured data detection, skip screenshots for faster processing
+    saveHtml: true,
+    saveScreenshots: false,
   };
 
   if (options.includePatterns) {
@@ -43,11 +67,13 @@ export async function crawlWebsite(
     input.excludeUrlGlobs = options.excludePatterns;
   }
 
+  console.log(`Starting ${isLightweight ? 'lightweight' : 'full'} website crawl: ${maxPages} pages, depth ${maxDepth}, ${crawlerType}`);
+
   try {
     const { items } = await client.callActor<WebsiteCrawlerInput, WebsiteCrawlerResult>(
       ACTOR_ID,
       input,
-      { waitForFinish: 900, memory: 32768 } // 15 minutes timeout, 32GB memory for heavy crawling
+      { waitForFinish: timeout, memory }
     );
 
     return {

@@ -37,7 +37,7 @@ interface ResearchProgressProps {
   onComplete?: (results: Record<string, unknown>) => void;
 }
 
-// Task display order: GBP + Sitemap (parallel), then Competitors, Website, SEO, Citations
+// Task display order: GBP + Sitemap (parallel), then Competitors, Website, SEO, Citations, AI Analysis
 const TASK_INFO = {
   gbp: {
     label: 'Google Business Profile',
@@ -80,6 +80,13 @@ const TASK_INFO = {
     icon: '📋',
     resultKey: 'citations',
     order: 6,
+  },
+  aiAnalysis: {
+    label: 'AI Analysis',
+    description: 'Using Claude AI to analyze data and pre-fill intake form',
+    icon: '🤖',
+    resultKey: 'aiAnalysis',
+    order: 7,
   },
 };
 
@@ -365,7 +372,7 @@ export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProp
         {sessionStatus?.status === 'running' && (
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
-              This usually takes less than a minute.
+              This usually takes less than 5 minutes, but could take longer depending on the size of the website.
             </p>
           </div>
         )}

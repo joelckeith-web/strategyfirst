@@ -32,6 +32,10 @@ export interface WebsiteCrawlerInput {
     useApifyProxy: boolean;
     apifyProxyGroups?: string[];
   };
+  /** Whether to save full HTML content (disable for faster crawls) */
+  saveHtml?: boolean;
+  /** Whether to save screenshots (disable for faster crawls) */
+  saveScreenshots?: boolean;
 }
 
 export interface WebsiteCrawlerResult {
@@ -82,6 +86,73 @@ export interface GooglePlacesCrawlerInput {
   scrapeReviewId?: boolean;
   scrapeReviewUrl?: boolean;
   scrapeResponseFromOwnerText?: boolean;
+  /** Custom geolocation using GeoJSON (Point with radiusKm, Polygon, or MultiPolygon) */
+  customGeolocation?: {
+    type: 'Point' | 'Polygon' | 'MultiPolygon';
+    coordinates: number[] | number[][] | number[][][];
+    /** Radius in kilometers (only for Point type, default 5km) */
+    radiusKm?: number;
+  };
+  /** Zoom level 1-21 (higher = more granular, more results) */
+  zoom?: number;
+}
+
+// Google Search (SERP) Scraper Types
+export interface GoogleSearchScraperInput {
+  queries: string;
+  languageCode?: string;
+  resultsPerPage?: number;
+  maxPagesPerQuery?: number;
+  mobileResults?: boolean;
+  /** Country code for localized results (e.g., 'us', 'uk') */
+  countryCode?: string;
+  /** Custom geolocation name for local results */
+  customGeolocation?: string;
+}
+
+export interface GoogleSearchResult {
+  searchQuery: {
+    term: string;
+    page: number;
+    type: string;
+    countryCode: string;
+    languageCode: string;
+  };
+  url: string;
+  organicResults: Array<{
+    title: string;
+    url: string;
+    displayedUrl: string;
+    description: string;
+    siteLinks?: Array<{ title: string; url: string }>;
+  }>;
+  /** Local Pack / Map Pack results from SERP */
+  localResults?: Array<{
+    title: string;
+    url?: string;
+    rating?: number;
+    reviewsCount?: number;
+    address?: string;
+    phone?: string;
+    category?: string;
+    position?: number;
+  }>;
+  paidResults?: Array<{
+    title: string;
+    url: string;
+    displayedUrl: string;
+    description: string;
+  }>;
+  relatedQueries?: Array<{
+    title: string;
+    url: string;
+  }>;
+  peopleAlsoAsk?: Array<{
+    question: string;
+    answer: string;
+    url: string;
+    title: string;
+  }>;
 }
 
 export interface GooglePlacesResult {

@@ -5,8 +5,9 @@ import type { ResearchSessionInsert, Json } from '@/lib/supabase/types';
 import {
   searchGooglePlaces,
   getGooglePlaceByUrl,
-  findCompetitors,
+  findCompetitorsEnhanced,
   extractGbpMetrics,
+  calculateProminenceScore,
 } from '@/services/apify/googlePlaces';
 import { crawlWebsite } from '@/services/apify/websiteCrawler';
 import { extractSitemap, analyzeSitemapStructure } from '@/services/apify/sitemapExtractor';
@@ -256,6 +257,8 @@ async function triggerApifyResearch(
           },
           // Pass the raw category for competitor search
           categoryName: place.categoryName,
+          // Pass location coordinates for radius-based competitor search
+          coordinates: place.location ? [place.location.lng, place.location.lat] as [number, number] : undefined,
         };
       }
       return { success: false, error: gbpResult.error || 'No GBP data found' };
@@ -362,17 +365,29 @@ async function triggerApifyResearch(
 
   const competitorTask = async () => {
     try {
-      const competitorResult = await findCompetitors(competitorSearchQuery, location, 5);
+      // Use enhanced competitor search with 20-mile radius and Map Pack
+      const competitorResult = await findCompetitorsEnhanced(
+        competitorSearchQuery,
+        location,
+        10, // Get more results initially for better filtering
+        {
+          // Use GBP coordinates if available for radius-based search
+          centerCoordinates: gbpRes.success ? gbpRes.coordinates : undefined,
+          radiusKm: 32, // ~20 miles
+          includeMapPack: true,
+        }
+      );
 
-      if (competitorResult.success && competitorResult.places.length > 0) {
+      if (competitorResult.success && (competitorResult.competitors.length > 0 || competitorResult.mapPack.length > 0)) {
         // Filter out the user's own business from competitors
-        const filteredPlaces = competitorResult.places.filter(place => {
+        const filteredPlaces = competitorResult.competitors.filter(place => {
           const placeName = place.title?.toLowerCase() || '';
           const businessName = input.businessName.toLowerCase();
           // Exclude if names are very similar
           return !placeName.includes(businessName) && !businessName.includes(placeName);
         });
 
+        // Build competitor list with prominence scores
         const competitors = filteredPlaces.slice(0, 5).map((place, index) => {
           const metrics = extractGbpMetrics(place);
           return {
@@ -385,9 +400,31 @@ async function triggerApifyResearch(
             address: metrics.address,
             categories: metrics.categories,
             url: metrics.url,
+            prominenceScore: calculateProminenceScore(metrics.rating, metrics.totalReviews),
           };
         });
-        return { success: true, data: competitors };
+
+        // Include Map Pack results (these are the top 3 in Google SERP)
+        const mapPackCompetitors = competitorResult.mapPack
+          .filter(mp => {
+            const mpName = mp.title?.toLowerCase() || '';
+            const businessName = input.businessName.toLowerCase();
+            return !mpName.includes(businessName) && !businessName.includes(mpName);
+          })
+          .map((mp, index) => ({
+            rank: index + 1,
+            name: mp.title,
+            rating: mp.rating || 0,
+            reviewCount: mp.reviewsCount || 0,
+            isMapPackResult: true,
+            mapPackPosition: mp.position,
+          }));
+
+        return {
+          success: true,
+          data: competitors,
+          mapPack: mapPackCompetitors,
+        };
       }
       return { success: false, error: competitorResult.error || 'No competitors found' };
     } catch (err) {
@@ -401,6 +438,11 @@ async function triggerApifyResearch(
   // Process competitor results
   if (competitorRes.success) {
     accumulatedResults.competitors = competitorRes.data;
+    // Store Map Pack results separately for display
+    if (competitorRes.mapPack && competitorRes.mapPack.length > 0) {
+      accumulatedResults.mapPack = competitorRes.mapPack;
+      console.log(`Found ${competitorRes.mapPack.length} Map Pack competitors`);
+    }
     completedSteps.push('competitors');
   } else {
     failedSteps.push('competitors');
@@ -429,8 +471,9 @@ async function triggerApifyResearch(
 
   const websiteTask = async () => {
     try {
-      // Use maximum memory for the heavy website crawl
-      const crawlResult = await crawlWebsite(input.website, { maxPages: 30, maxDepth: 3 });
+      // Use lightweight mode for faster initial research (~30-60s vs 2-5min)
+      // This crawls 10 pages at depth 2 using cheerio (HTTP-based, no browser)
+      const crawlResult = await crawlWebsite(input.website, { lightweight: true });
 
       if (crawlResult.success && crawlResult.pages.length > 0) {
         const homePage = crawlResult.pages.find(p => {
@@ -491,6 +534,56 @@ async function triggerApifyResearch(
   } else {
     failedSteps.push('website');
     errors.push({ step: 'website', code: 'ERROR', message: websiteRes.error || 'Unknown error' });
+  }
+
+  // Supplement sitemap data with crawler data when sitemap is empty or unavailable
+  const currentSitemap = accumulatedResults.sitemap as {
+    totalPages?: number;
+    pageTypes?: Record<string, number>;
+    hasServicePages?: boolean;
+    hasBlog?: boolean;
+    hasLocationPages?: boolean;
+    recentlyUpdated?: number;
+  } | undefined;
+
+  if (websiteRes.success && websiteRes.data && (!currentSitemap?.totalPages || currentSitemap.totalPages === 0)) {
+    // Derive site structure from crawler data
+    const crawlerPages = websiteRes.data.pages as Array<{ url: string; title: string }> || [];
+    const pageTypes: Record<string, number> = {};
+    let hasServicePages = false;
+    let hasBlog = false;
+    let hasLocationPages = false;
+
+    for (const page of crawlerPages) {
+      const urlLower = page.url.toLowerCase();
+      if (urlLower.includes('/service') || urlLower.includes('/services') || urlLower.includes('/what-we-do')) {
+        pageTypes['services'] = (pageTypes['services'] || 0) + 1;
+        hasServicePages = true;
+      } else if (urlLower.includes('/blog') || urlLower.includes('/news') || urlLower.includes('/article') || urlLower.includes('/post')) {
+        pageTypes['blog'] = (pageTypes['blog'] || 0) + 1;
+        hasBlog = true;
+      } else if (urlLower.includes('/location') || urlLower.includes('/area') || urlLower.includes('/city') || urlLower.includes('/service-area')) {
+        pageTypes['locations'] = (pageTypes['locations'] || 0) + 1;
+        hasLocationPages = true;
+      } else if (urlLower.includes('/about')) {
+        pageTypes['about'] = (pageTypes['about'] || 0) + 1;
+      } else if (urlLower.includes('/contact')) {
+        pageTypes['contact'] = (pageTypes['contact'] || 0) + 1;
+      } else {
+        pageTypes['other'] = (pageTypes['other'] || 0) + 1;
+      }
+    }
+
+    accumulatedResults.sitemap = {
+      totalPages: websiteRes.data.totalPages || crawlerPages.length,
+      pageTypes,
+      hasServicePages,
+      hasBlog,
+      hasLocationPages,
+      recentlyUpdated: 0, // Can't determine from crawler data
+      derivedFromCrawler: true,
+    };
+    console.log('Sitemap data derived from crawler:', accumulatedResults.sitemap);
   }
 
   // Generate SEO audit from collected data
