@@ -83,7 +83,7 @@ const TASK_INFO = {
   },
   aiAnalysis: {
     label: 'AI Analysis',
-    description: 'Using Claude AI to analyze data and pre-fill intake form',
+    description: 'Using AI to analyze data and pre-fill intake form',
     icon: '🤖',
     resultKey: 'aiAnalysis',
     order: 7,

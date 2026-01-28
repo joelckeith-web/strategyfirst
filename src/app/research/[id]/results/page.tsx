@@ -302,8 +302,8 @@ export default function ResearchResultsPage({
               </h2>
               <p className="text-sm text-gray-500 mt-1">
                 {aiAnalysis
-                  ? 'Claude AI has analyzed your research data'
-                  : 'Use Claude AI to analyze research data and pre-fill intake forms'}
+                  ? 'AI has analyzed your research data'
+                  : 'Use AI to analyze research data and pre-fill intake forms'}
               </p>
             </div>
             {!aiAnalysis && !isAnalyzing && (
@@ -320,7 +320,7 @@ export default function ResearchResultsPage({
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              <span className="text-gray-600">Analyzing with Claude AI... This may take 30-60 seconds.</span>
+              <span className="text-gray-600">Analyzing with AI... This may take 30-60 seconds.</span>
             </div>
           )}
 
