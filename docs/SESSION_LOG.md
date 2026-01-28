@@ -27,7 +27,9 @@
 - Disabled proxy for direct connections
 - Memory reduced to 4GB (cheerio is lightweight)
 
-Next: Test full flow with faster crawler and enhanced AI extraction.
+**Known Issue:** Website crawler still failing/timing out for larger sites (Titan Inspection). Need to investigate Apify actor configuration or consider async crawl approach.
+
+Next: Fix crawler for large sites, test full flow with enhanced AI extraction.
 
 ---
 
