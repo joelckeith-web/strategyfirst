@@ -107,12 +107,151 @@ interface AIAnalysisData {
     total: number;
   };
   insights: {
-    contentGaps: Array<{ gap: string; priority: string; action: string; category?: string }>;
-    competitiveInsights: Array<{ insight: string; opportunity: string }>;
-    suggestedKeywords: Array<{ keyword: string; intent: string }>;
-    quickWins: Array<{ action: string; impact: string; effort: string; category?: string; timeframe?: string }>;
+    contentGaps: Array<{ gap: string; priority: string; action: string; category?: string; targetKeyword?: string; wordCountTarget?: number }>;
+    competitiveInsights: Array<{ insight: string; opportunity: string; competitors?: string[]; actionableStep?: string }>;
+    suggestedKeywords: Array<{ keyword: string; intent: string; pageTarget?: string; priority?: string }>;
+    quickWins: Array<{ action: string; impact: string; effort: string; category?: string; timeframe?: string; implementation?: string }>;
     priorityRecommendations: Array<{ priority: number; action: string; category: string; rationale: string; expectedImpact: string }>;
+    competitorComparison?: {
+      clientProfile?: Record<string, unknown>;
+      competitors?: Array<Record<string, unknown>>;
+      gbpComparison?: { clientRank: number; averageCompetitorRating: number; reviewCountComparison: string; recommendations: string[] };
+      contentComparison?: { clientContentScore: number; averageCompetitorScore: number; contentGapsVsCompetitors: string[]; contentAdvantages: string[] };
+      serviceComparison?: { sharedServices: string[]; uniqueToClient: string[]; missingFromClient: string[]; pricingPosition: string };
+      overallPosition?: string;
+      competitiveAdvantages?: string[];
+      competitiveDisadvantages?: string[];
+    };
+    icpAnalysis?: {
+      primaryICP?: {
+        demographics?: Record<string, string>;
+        psychographics?: Record<string, string | string[]>;
+        painPoints?: string[];
+        needs?: string[];
+        objections?: string[];
+      };
+      avatars?: Array<{
+        name: string;
+        tagline: string;
+        age?: number;
+        occupation?: string;
+        backgroundStory?: string;
+        goals?: string[];
+        frustrations?: string[];
+        triggerEvent?: string;
+        decisionCriteria?: string[];
+        representativeQuote?: string;
+      }>;
+      targetingRecommendations?: string[];
+      messagingRecommendations?: string[];
+    };
+    serpGapAnalysis?: {
+      overallOpportunityScore?: number;
+      serpOpportunities?: Array<{
+        keyword: string;
+        opportunityScore: number;
+        difficulty: string;
+        rationale: string;
+        recommendedContentType: string;
+        recommendedWordCount: number;
+        titleTagRecommendation?: string;
+      }>;
+      quickWinActions?: Array<{
+        action: string;
+        targetKeyword: string;
+        competitorToOutrank?: string;
+        estimatedEffort: string;
+        rationale: string;
+      }>;
+      topicCoverageGaps?: Array<{
+        topic: string;
+        competitorsCovering: string[];
+        priority: string;
+        suggestedTitle: string;
+        estimatedWordCount: number;
+      }>;
+    };
+    hubSpokeAnalysis?: {
+      overallScore?: number;
+      hasHubPages?: boolean;
+      hubPages?: Array<{
+        topic: string;
+        currentUrl?: string;
+        status: string;
+        currentWordCount: number;
+        targetWordCount: number;
+        spokeCount: number;
+        targetSpokeCount: number;
+        recommendations: string[];
+      }>;
+      missingHubTopics?: Array<{
+        topic: string;
+        rationale: string;
+        suggestedSpokes: string[];
+        primaryKeyword: string;
+      }>;
+      internalLinkingScore?: number;
+    };
+    servicePageStrategy?: Array<{
+      service: string;
+      currentStatus: string;
+      currentWordCount: number;
+      recommendedUrl: string;
+      titleTag: string;
+      h1: string;
+      targetKeywords: string[];
+      wordCountTarget: number;
+      contentSections: string[];
+    }>;
+    locationPageStrategy?: Array<{
+      location: string;
+      currentStatus: string;
+      recommendedUrl: string;
+      titleTag: string;
+      localKeywords: string[];
+      wordCountTarget: number;
+    }>;
+    aeoStrategy?: {
+      currentReadiness?: string;
+      entityFirstScore?: number;
+      aeoComplianceChecklist?: {
+        brandInFirstParagraph: boolean;
+        twoSameAsReferences: boolean;
+        schemaCompatibleFormatting: boolean;
+        authorAttribution: boolean;
+        overallScore: number;
+        recommendations: string[];
+      };
+      faqOpportunities?: Array<{
+        question: string;
+        answer: string;
+        targetPage: string;
+      }>;
+    };
+    seoTechnical?: {
+      metaTitleTemplate?: string;
+      metaDescriptionTemplate?: string;
+      robotsTxtStatus?: string;
+      llmsTxtStatus?: string;
+      llmsTxtRecommendations?: string;
+      missingSchemaTypes?: string[];
+    };
   };
+}
+
+// Info tooltip component
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <div className="group relative inline-block ml-1">
+      <svg className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div className="invisible group-hover:visible absolute z-50 w-64 p-2 mt-1 text-xs text-white bg-gray-900 rounded-lg shadow-lg -left-28 top-5">
+        {text}
+        <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+      </div>
+    </div>
+  );
 }
 
 interface ResearchResults {
@@ -345,73 +484,80 @@ export default function ResearchResultsPage({
           )}
 
           {aiAnalysis && (
-            <div className="space-y-6">
-              {/* Summary Stats */}
+            <div className="space-y-8">
+              {/* Summary Stats with Tooltips */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <p className="text-3xl font-bold text-blue-600">
                     {Math.round(aiAnalysis.overallConfidence * 100)}%
                   </p>
-                  <p className="text-sm text-gray-500">Overall Confidence</p>
+                  <p className="text-sm text-gray-500">
+                    Overall Confidence
+                    <InfoTooltip text="Average confidence across all 68 inferred intake fields. Higher means more data was available to make accurate inferences." />
+                  </p>
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <p className="text-3xl font-bold text-green-600">
                     {aiAnalysis.fieldsWithHighConfidence}
                   </p>
-                  <p className="text-sm text-gray-500">High Confidence Fields</p>
+                  <p className="text-sm text-gray-500">
+                    High Confidence
+                    <InfoTooltip text="Fields with 70%+ confidence that can be used directly. These had strong supporting data from GBP, website, or competitors." />
+                  </p>
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <p className="text-3xl font-bold text-amber-600">
                     {aiAnalysis.fieldsWithLowConfidence}
                   </p>
-                  <p className="text-sm text-gray-500">Need Verification</p>
+                  <p className="text-sm text-gray-500">
+                    Need Verification
+                    <InfoTooltip text="Fields with under 40% confidence that should be verified with the client. These were educated guesses due to limited data." />
+                  </p>
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <p className="text-3xl font-bold text-gray-600">
                     {aiAnalysis.dataQualityScore}
                   </p>
-                  <p className="text-sm text-gray-500">Data Quality</p>
+                  <p className="text-sm text-gray-500">
+                    Data Quality
+                    <InfoTooltip text="0-100 score based on completeness of input data (GBP, sitemap, website crawl, competitors). Higher = more data sources available." />
+                  </p>
                 </div>
               </div>
 
-              {/* Quick Wins */}
-              {aiAnalysis.insights?.quickWins && aiAnalysis.insights.quickWins.length > 0 && (
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-3">Quick Wins</h3>
-                  <div className="space-y-2">
-                    {aiAnalysis.insights.quickWins.slice(0, 5).map((win, idx) => (
-                      <div key={idx} className="flex items-start p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium mr-3 ${
-                          win.impact === 'high' ? 'bg-green-200 text-green-800' :
-                          win.impact === 'medium' ? 'bg-yellow-200 text-yellow-800' :
-                          'bg-gray-200 text-gray-800'
-                        }`}>
-                          {win.impact} impact
-                        </span>
-                        <span className="text-sm text-gray-700">{win.action}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Content Gaps */}
-              {aiAnalysis.insights?.contentGaps && aiAnalysis.insights.contentGaps.length > 0 && (
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-3">Content Gaps</h3>
-                  <div className="space-y-2">
-                    {aiAnalysis.insights.contentGaps.slice(0, 5).map((gap, idx) => (
-                      <div key={idx} className="flex items-start p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium mr-3 ${
-                          gap.priority === 'high' ? 'bg-red-200 text-red-800' :
-                          gap.priority === 'medium' ? 'bg-yellow-200 text-yellow-800' :
-                          'bg-gray-200 text-gray-800'
-                        }`}>
-                          {gap.priority}
-                        </span>
-                        <div>
-                          <p className="text-sm text-gray-700">{gap.gap}</p>
-                          <p className="text-xs text-gray-500 mt-1">Action: {gap.action}</p>
+              {/* SERP Gap Analysis - Quick Wins */}
+              {aiAnalysis.insights?.serpGapAnalysis?.quickWinActions && aiAnalysis.insights.serpGapAnalysis.quickWinActions.length > 0 && (
+                <div className="border-t pt-6">
+                  <h3 className="font-semibold text-gray-900 mb-1 flex items-center">
+                    SERP Quick Wins
+                    <InfoTooltip text="Specific ranking opportunities where competitors have weaknesses. These are low-effort actions that can yield results in 1-3 months." />
+                  </h3>
+                  <p className="text-xs text-gray-500 mb-3">Ranking opportunities based on competitor weaknesses</p>
+                  <div className="space-y-3">
+                    {aiAnalysis.insights.serpGapAnalysis.quickWinActions.map((win, idx) => (
+                      <div key={idx} className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">{win.action}</p>
+                            <p className="text-sm text-gray-600 mt-1">{win.rationale}</p>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                Target: {win.targetKeyword}
+                              </span>
+                              {win.competitorToOutrank && (
+                                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">
+                                  Beat: {win.competitorToOutrank}
+                                </span>
+                              )}
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                win.estimatedEffort === 'easy' ? 'bg-green-100 text-green-700' :
+                                win.estimatedEffort === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-700'
+                              }`}>
+                                Effort: {win.estimatedEffort}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -419,32 +565,350 @@ export default function ResearchResultsPage({
                 </div>
               )}
 
+              {/* Hub-Spoke Content Strategy */}
+              {aiAnalysis.insights?.hubSpokeAnalysis && (
+                <div className="border-t pt-6">
+                  <h3 className="font-semibold text-gray-900 mb-1 flex items-center">
+                    Hub-Spoke Content Strategy
+                    <InfoTooltip text="Hub pages are pillar content (3,000-5,000 words) that link to 8-12 spoke pages (1,500-2,200 words each). This structure signals topical authority to search engines." />
+                  </h3>
+                  <p className="text-xs text-gray-500 mb-3">Content architecture assessment against Hub+Spoke methodology</p>
+
+                  {/* Hub-Spoke Score */}
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="flex items-center">
+                      <span className="text-2xl font-bold text-blue-600">{aiAnalysis.insights.hubSpokeAnalysis.overallScore || 0}</span>
+                      <span className="text-gray-500 ml-1">/100</span>
+                    </div>
+                    <span className="text-sm text-gray-600">Content Architecture Score</span>
+                    {aiAnalysis.insights.hubSpokeAnalysis.internalLinkingScore !== undefined && (
+                      <span className="text-sm text-gray-500">| Internal Linking: {aiAnalysis.insights.hubSpokeAnalysis.internalLinkingScore}/100</span>
+                    )}
+                  </div>
+
+                  {/* Missing Hub Topics */}
+                  {aiAnalysis.insights.hubSpokeAnalysis.missingHubTopics && aiAnalysis.insights.hubSpokeAnalysis.missingHubTopics.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Recommended Hub Pages (Pillar Content)</h4>
+                      <div className="space-y-3">
+                        {aiAnalysis.insights.hubSpokeAnalysis.missingHubTopics.map((hub, idx) => (
+                          <div key={idx} className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                            <p className="font-medium text-purple-900">{hub.topic}</p>
+                            <p className="text-sm text-gray-600 mt-1">{hub.rationale}</p>
+                            <p className="text-xs text-purple-700 mt-2">Target keyword: {hub.primaryKeyword}</p>
+                            {hub.suggestedSpokes && hub.suggestedSpokes.length > 0 && (
+                              <div className="mt-3">
+                                <p className="text-xs font-medium text-gray-600">Supporting spoke pages ({hub.suggestedSpokes.length}):</p>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {hub.suggestedSpokes.slice(0, 8).map((spoke, i) => (
+                                    <span key={i} className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">{spoke}</span>
+                                  ))}
+                                  {hub.suggestedSpokes.length > 8 && (
+                                    <span className="text-xs text-gray-500">+{hub.suggestedSpokes.length - 8} more</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Existing Hub Pages Status */}
+                  {aiAnalysis.insights.hubSpokeAnalysis.hubPages && aiAnalysis.insights.hubSpokeAnalysis.hubPages.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Existing Hub Pages</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left">Topic</th>
+                              <th className="px-3 py-2 text-left">Status</th>
+                              <th className="px-3 py-2 text-left">Words</th>
+                              <th className="px-3 py-2 text-left">Spokes</th>
+                              <th className="px-3 py-2 text-left">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {aiAnalysis.insights.hubSpokeAnalysis.hubPages.map((hub, idx) => (
+                              <tr key={idx} className="border-t">
+                                <td className="px-3 py-2">{hub.topic}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`text-xs px-2 py-0.5 rounded ${
+                                    hub.status === 'strong' ? 'bg-green-100 text-green-700' :
+                                    hub.status === 'adequate' ? 'bg-yellow-100 text-yellow-700' :
+                                    hub.status === 'thin' ? 'bg-orange-100 text-orange-700' :
+                                    'bg-red-100 text-red-700'
+                                  }`}>{hub.status}</span>
+                                </td>
+                                <td className="px-3 py-2">{hub.currentWordCount}/{hub.targetWordCount}</td>
+                                <td className="px-3 py-2">{hub.spokeCount}/{hub.targetSpokeCount}</td>
+                                <td className="px-3 py-2 text-xs text-gray-600">{hub.recommendations?.[0]}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Service Page Strategy */}
+              {aiAnalysis.insights?.servicePageStrategy && aiAnalysis.insights.servicePageStrategy.length > 0 && (
+                <div className="border-t pt-6">
+                  <h3 className="font-semibold text-gray-900 mb-1 flex items-center">
+                    Service Page Recommendations
+                    <InfoTooltip text="Specific page specs for each service. Each service page should be 1,500-2,200 words with FAQ section, proper schema, and internal linking." />
+                  </h3>
+                  <p className="text-xs text-gray-500 mb-3">Detailed specs for service-specific spoke pages</p>
+                  <div className="space-y-4">
+                    {aiAnalysis.insights.servicePageStrategy.map((page, idx) => (
+                      <div key={idx} className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-gray-900">{page.service}</h4>
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            page.currentStatus === 'strong' ? 'bg-green-100 text-green-700' :
+                            page.currentStatus === 'adequate' ? 'bg-yellow-100 text-yellow-700' :
+                            page.currentStatus === 'thin' ? 'bg-orange-100 text-orange-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>{page.currentStatus}</span>
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-gray-500">Recommended URL</p>
+                            <p className="font-mono text-xs text-blue-700">{page.recommendedUrl}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Word Count</p>
+                            <p>{page.currentWordCount} → <span className="font-medium">{page.wordCountTarget}</span> target</p>
+                          </div>
+                          <div className="md:col-span-2">
+                            <p className="text-xs text-gray-500">Title Tag</p>
+                            <p className="text-xs">{page.titleTag}</p>
+                          </div>
+                          <div className="md:col-span-2">
+                            <p className="text-xs text-gray-500">H1</p>
+                            <p className="text-xs font-medium">{page.h1}</p>
+                          </div>
+                          {page.targetKeywords && page.targetKeywords.length > 0 && (
+                            <div className="md:col-span-2">
+                              <p className="text-xs text-gray-500">Target Keywords</p>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {page.targetKeywords.map((kw, i) => (
+                                  <span key={i} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{kw}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {page.contentSections && page.contentSections.length > 0 && (
+                            <div className="md:col-span-2">
+                              <p className="text-xs text-gray-500">Content Sections</p>
+                              <ol className="text-xs text-gray-600 mt-1 list-decimal list-inside">
+                                {page.contentSections.map((section, i) => (
+                                  <li key={i}>{section}</li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* AEO Strategy */}
+              {aiAnalysis.insights?.aeoStrategy && (
+                <div className="border-t pt-6">
+                  <h3 className="font-semibold text-gray-900 mb-1 flex items-center">
+                    AEO (Answer Engine Optimization)
+                    <InfoTooltip text="Entity-First optimization for AI search engines like ChatGPT, Perplexity, and Google SGE. Focuses on making content citable and authoritative." />
+                  </h3>
+                  <p className="text-xs text-gray-500 mb-3">Entity-first content optimization for AI search visibility</p>
+
+                  <div className="grid md:grid-cols-2 gap-4 mb-4">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-500">AEO Readiness</p>
+                      <p className={`text-lg font-bold ${
+                        aiAnalysis.insights.aeoStrategy.currentReadiness === 'high' ? 'text-green-600' :
+                        aiAnalysis.insights.aeoStrategy.currentReadiness === 'medium' ? 'text-yellow-600' :
+                        'text-red-600'
+                      }`}>{aiAnalysis.insights.aeoStrategy.currentReadiness || 'Unknown'}</p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-500">Entity-First Score</p>
+                      <p className="text-lg font-bold text-blue-600">{aiAnalysis.insights.aeoStrategy.entityFirstScore || 0}/100</p>
+                    </div>
+                  </div>
+
+                  {/* AEO Compliance Checklist */}
+                  {aiAnalysis.insights.aeoStrategy.aeoComplianceChecklist && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Compliance Checklist</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {[
+                          { key: 'brandInFirstParagraph', label: 'Brand in first paragraph' },
+                          { key: 'twoSameAsReferences', label: '2+ sameAs references' },
+                          { key: 'schemaCompatibleFormatting', label: 'Schema-compatible format' },
+                          { key: 'authorAttribution', label: 'Author attribution' },
+                        ].map(({ key, label }) => (
+                          <div key={key} className={`p-2 rounded text-xs ${
+                            aiAnalysis.insights.aeoStrategy?.aeoComplianceChecklist?.[key as keyof typeof aiAnalysis.insights.aeoStrategy.aeoComplianceChecklist]
+                              ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                          }`}>
+                            {aiAnalysis.insights.aeoStrategy?.aeoComplianceChecklist?.[key as keyof typeof aiAnalysis.insights.aeoStrategy.aeoComplianceChecklist] ? '✓' : '✗'} {label}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* FAQ Opportunities */}
+                  {aiAnalysis.insights.aeoStrategy.faqOpportunities && aiAnalysis.insights.aeoStrategy.faqOpportunities.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">FAQ Schema Opportunities</h4>
+                      <div className="space-y-2">
+                        {aiAnalysis.insights.aeoStrategy.faqOpportunities.slice(0, 5).map((faq, idx) => (
+                          <div key={idx} className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                            <p className="font-medium text-sm text-gray-900">Q: {faq.question}</p>
+                            <p className="text-xs text-gray-600 mt-1">A: {faq.answer}</p>
+                            <p className="text-xs text-indigo-600 mt-1">Target page: {faq.targetPage}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ICP Analysis */}
+              {aiAnalysis.insights?.icpAnalysis?.primaryICP && (
+                <div className="border-t pt-6">
+                  <h3 className="font-semibold text-gray-900 mb-1 flex items-center">
+                    Ideal Client Profile (ICP)
+                    <InfoTooltip text="Who the ideal customer is based on service offerings, pricing, location, and competitor analysis. Use this for ad targeting and content messaging." />
+                  </h3>
+                  <p className="text-xs text-gray-500 mb-3">Target audience analysis based on research data</p>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {/* Demographics */}
+                    {aiAnalysis.insights.icpAnalysis.primaryICP.demographics && (
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <h4 className="font-medium text-gray-900 mb-2">Demographics</h4>
+                        <dl className="space-y-1 text-sm">
+                          {Object.entries(aiAnalysis.insights.icpAnalysis.primaryICP.demographics).map(([key, val]) => (
+                            <div key={key} className="flex justify-between">
+                              <dt className="text-gray-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</dt>
+                              <dd className="text-gray-900">{String(val)}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </div>
+                    )}
+
+                    {/* Pain Points */}
+                    {aiAnalysis.insights.icpAnalysis.primaryICP.painPoints && (
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <h4 className="font-medium text-gray-900 mb-2">Pain Points</h4>
+                        <ul className="space-y-1 text-sm">
+                          {aiAnalysis.insights.icpAnalysis.primaryICP.painPoints.map((point, i) => (
+                            <li key={i} className="text-gray-700">• {point}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Customer Avatars */}
+                  {aiAnalysis.insights.icpAnalysis.avatars && aiAnalysis.insights.icpAnalysis.avatars.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="font-medium text-gray-900 mb-2">Customer Avatars</h4>
+                      <div className="grid md:grid-cols-2 gap-4">
+                        {aiAnalysis.insights.icpAnalysis.avatars.map((avatar, idx) => (
+                          <div key={idx} className="p-4 bg-teal-50 border border-teal-200 rounded-lg">
+                            <h5 className="font-bold text-teal-900">{avatar.name}</h5>
+                            <p className="text-sm text-teal-700 italic">{avatar.tagline}</p>
+                            {avatar.backgroundStory && (
+                              <p className="text-sm text-gray-600 mt-2">{avatar.backgroundStory}</p>
+                            )}
+                            {avatar.triggerEvent && (
+                              <p className="text-xs text-gray-500 mt-2"><strong>Trigger:</strong> {avatar.triggerEvent}</p>
+                            )}
+                            {avatar.representativeQuote && (
+                              <p className="text-sm text-gray-700 mt-2 italic">&quot;{avatar.representativeQuote}&quot;</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Technical SEO */}
+              {aiAnalysis.insights?.seoTechnical && (
+                <div className="border-t pt-6">
+                  <h3 className="font-semibold text-gray-900 mb-1 flex items-center">
+                    Technical SEO Recommendations
+                    <InfoTooltip text="Specific technical SEO improvements including meta templates, robots.txt, llms.txt, and schema markup." />
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-4 mt-3">
+                    {aiAnalysis.insights.seoTechnical.metaTitleTemplate && (
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-gray-500">Meta Title Template</p>
+                        <p className="text-sm font-mono">{aiAnalysis.insights.seoTechnical.metaTitleTemplate}</p>
+                      </div>
+                    )}
+                    {aiAnalysis.insights.seoTechnical.metaDescriptionTemplate && (
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-gray-500">Meta Description Template</p>
+                        <p className="text-sm font-mono">{aiAnalysis.insights.seoTechnical.metaDescriptionTemplate}</p>
+                      </div>
+                    )}
+                    {aiAnalysis.insights.seoTechnical.llmsTxtRecommendations && (
+                      <div className="p-3 bg-gray-50 rounded-lg md:col-span-2">
+                        <p className="text-xs text-gray-500">llms.txt Recommendations (for AI crawlers)</p>
+                        <p className="text-sm whitespace-pre-wrap">{aiAnalysis.insights.seoTechnical.llmsTxtRecommendations}</p>
+                      </div>
+                    )}
+                    {aiAnalysis.insights.seoTechnical.missingSchemaTypes && aiAnalysis.insights.seoTechnical.missingSchemaTypes.length > 0 && (
+                      <div className="p-3 bg-gray-50 rounded-lg md:col-span-2">
+                        <p className="text-xs text-gray-500">Missing Schema Types</p>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {aiAnalysis.insights.seoTechnical.missingSchemaTypes.map((schema, i) => (
+                            <span key={i} className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">{schema}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Priority Recommendations */}
               {aiAnalysis.insights?.priorityRecommendations && aiAnalysis.insights.priorityRecommendations.length > 0 && (
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-3">Priority Recommendations</h3>
+                <div className="border-t pt-6">
+                  <h3 className="font-semibold text-gray-900 mb-3">Priority Action Items</h3>
                   <ul className="space-y-3">
-                    {aiAnalysis.insights.priorityRecommendations.slice(0, 5).map((rec, idx) => (
-                      <li key={idx} className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    {aiAnalysis.insights.priorityRecommendations.map((rec, idx) => (
+                      <li key={idx} className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                         <div className="flex items-start">
-                          <span className="w-6 h-6 flex items-center justify-center bg-blue-500 text-white rounded-full text-xs font-bold mr-3 flex-shrink-0">
+                          <span className="w-7 h-7 flex items-center justify-center bg-blue-500 text-white rounded-full text-sm font-bold mr-3 flex-shrink-0">
                             {rec.priority || idx + 1}
                           </span>
                           <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">{rec.action}</p>
+                            <p className="font-medium text-gray-900">{rec.action}</p>
                             {rec.rationale && (
-                              <p className="text-xs text-gray-600 mt-1">{rec.rationale}</p>
+                              <p className="text-sm text-gray-600 mt-1">{rec.rationale}</p>
                             )}
                             <div className="flex items-center gap-2 mt-2">
                               {rec.category && (
-                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                                  {rec.category}
-                                </span>
+                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{rec.category}</span>
                               )}
                               {rec.expectedImpact && (
-                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                                  {rec.expectedImpact}
-                                </span>
+                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{rec.expectedImpact}</span>
                               )}
                             </div>
                           </div>
@@ -454,7 +918,6 @@ export default function ResearchResultsPage({
                   </ul>
                 </div>
               )}
-
             </div>
           )}
         </CardBody>
