@@ -36,6 +36,8 @@ export interface WebsiteCrawlerInput {
   saveHtml?: boolean;
   /** Whether to save screenshots (disable for faster crawls) */
   saveScreenshots?: boolean;
+  /** Timeout for each page request in seconds (default 30) */
+  requestHandlerTimeoutSecs?: number;
 }
 
 export interface WebsiteCrawlerResult {

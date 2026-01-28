@@ -40,11 +40,11 @@ export async function crawlWebsite(
   // Use playwright:firefox for full crawl (lighter than chrome, still handles JS)
   const crawlerType = isLightweight ? 'cheerio' : 'playwright:firefox';
 
-  // Memory: 4GB for cheerio, 16GB for playwright (reduced from 32GB)
-  const memory = isLightweight ? 4096 : 16384;
+  // Memory: 4GB for cheerio, 32GB for playwright (increased for larger sites)
+  const memory = isLightweight ? 4096 : 32768;
 
-  // Timeout: 3 min for lightweight, 10 min for full (increased for larger sites)
-  const timeout = isLightweight ? 180 : 600;
+  // Timeout: 3 min for lightweight, 15 min for full (increased for larger sites)
+  const timeout = isLightweight ? 180 : 900;
 
   const input: WebsiteCrawlerInput = {
     startUrls: [{ url }],
@@ -57,6 +57,8 @@ export async function crawlWebsite(
     // Always save HTML for structured data detection, skip screenshots for faster processing
     saveHtml: true,
     saveScreenshots: false,
+    // Increase request timeout for slow pages
+    requestHandlerTimeoutSecs: 60,
   };
 
   if (options.includePatterns) {
@@ -67,13 +69,13 @@ export async function crawlWebsite(
     input.excludeUrlGlobs = options.excludePatterns;
   }
 
-  console.log(`Starting ${isLightweight ? 'lightweight' : 'full'} website crawl: ${maxPages} pages, depth ${maxDepth}, ${crawlerType}`);
+  console.log(`Starting ${isLightweight ? 'lightweight' : 'full'} website crawl: ${maxPages} pages, depth ${maxDepth}, ${crawlerType}, memory=${memory}MB, timeout=${timeout}s`);
 
   try {
     const { items } = await client.callActor<WebsiteCrawlerInput, WebsiteCrawlerResult>(
       ACTOR_ID,
       input,
-      { waitForFinish: timeout, memory }
+      { waitForFinish: timeout, timeout, memory }
     );
 
     return {
