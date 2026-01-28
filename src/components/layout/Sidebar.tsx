@@ -19,7 +19,8 @@ const navigation = [
     ),
   },
   {
-    name: 'New Research',
+    name: 'AI Research',
+    subtitle: 'Automated data gathering',
     href: '/research',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
@@ -29,7 +30,8 @@ const navigation = [
     highlight: true,
   },
   {
-    name: 'Full Intake',
+    name: 'Manual Intake',
+    subtitle: 'Full questionnaire',
     href: '/intake',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
@@ -91,6 +93,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               const isActive = pathname === item.href ||
                 (item.href !== '/' && pathname.startsWith(item.href));
               const isHighlight = 'highlight' in item && item.highlight;
+              const subtitle = 'subtitle' in item ? item.subtitle : null;
 
               return (
                 <Link
@@ -110,12 +113,21 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                   <span className={isActive ? 'text-blue-600' : isHighlight ? 'text-green-600' : 'text-gray-400'}>
                     {item.icon}
                   </span>
-                  {item.name}
-                  {isHighlight && !isActive && (
-                    <span className="ml-auto text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                      New
-                    </span>
-                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      {item.name}
+                      {isHighlight && !isActive && (
+                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                          AI
+                        </span>
+                      )}
+                    </div>
+                    {subtitle && (
+                      <p className={`text-xs truncate ${isActive ? 'text-blue-500' : isHighlight ? 'text-green-600' : 'text-gray-400'}`}>
+                        {subtitle}
+                      </p>
+                    )}
+                  </div>
                 </Link>
               );
             })}

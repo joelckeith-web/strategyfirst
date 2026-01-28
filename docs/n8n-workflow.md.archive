@@ -1,4 +1,10 @@
-# n8n Research Workflow Documentation
+> **⚠️ ARCHIVED - January 2025**
+> This documentation is no longer active. n8n was replaced with direct Apify integration
+> using `@vercel/functions` for background processing. See `CLAUDE.md` for current architecture.
+
+---
+
+# n8n Research Workflow Documentation (ARCHIVED)
 
 ## Overview
 

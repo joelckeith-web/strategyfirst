@@ -107,11 +107,11 @@ interface AIAnalysisData {
     total: number;
   };
   insights: {
-    contentGaps: Array<{ gap: string; priority: string; action: string }>;
+    contentGaps: Array<{ gap: string; priority: string; action: string; category?: string }>;
     competitiveInsights: Array<{ insight: string; opportunity: string }>;
     suggestedKeywords: Array<{ keyword: string; intent: string }>;
-    quickWins: Array<{ action: string; impact: string; effort: string }>;
-    priorityRecommendations: string[];
+    quickWins: Array<{ action: string; impact: string; effort: string; category?: string; timeframe?: string }>;
+    priorityRecommendations: Array<{ priority: number; action: string; category: string; rationale: string; expectedImpact: string }>;
   };
 }
 
@@ -423,13 +423,32 @@ export default function ResearchResultsPage({
               {aiAnalysis.insights?.priorityRecommendations && aiAnalysis.insights.priorityRecommendations.length > 0 && (
                 <div>
                   <h3 className="font-medium text-gray-900 mb-3">Priority Recommendations</h3>
-                  <ul className="space-y-2">
+                  <ul className="space-y-3">
                     {aiAnalysis.insights.priorityRecommendations.slice(0, 5).map((rec, idx) => (
-                      <li key={idx} className="flex items-start text-sm">
-                        <span className="w-5 h-5 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full text-xs font-medium mr-2 flex-shrink-0">
-                          {idx + 1}
-                        </span>
-                        <span className="text-gray-700">{rec}</span>
+                      <li key={idx} className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-start">
+                          <span className="w-6 h-6 flex items-center justify-center bg-blue-500 text-white rounded-full text-xs font-bold mr-3 flex-shrink-0">
+                            {rec.priority || idx + 1}
+                          </span>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{rec.action}</p>
+                            {rec.rationale && (
+                              <p className="text-xs text-gray-600 mt-1">{rec.rationale}</p>
+                            )}
+                            <div className="flex items-center gap-2 mt-2">
+                              {rec.category && (
+                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                                  {rec.category}
+                                </span>
+                              )}
+                              {rec.expectedImpact && (
+                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                                  {rec.expectedImpact}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </li>
                     ))}
                   </ul>

@@ -17,7 +17,7 @@ Primary table for the research-first flow. Stores session state, progress, and r
 | `progress` | JSONB | Progress tracking object |
 | `results` | JSONB | Research results by category |
 | `errors` | JSONB | Array of error objects |
-| `n8n_execution_id` | TEXT | n8n workflow execution ID |
+| `n8n_execution_id` | TEXT | ~~n8n workflow execution ID~~ (legacy, unused) |
 | `callback_url` | TEXT | URL for n8n callbacks |
 | `created_at` | TIMESTAMPTZ | Creation timestamp |
 | `updated_at` | TIMESTAMPTZ | Last update timestamp |
