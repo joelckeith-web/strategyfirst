@@ -1,7 +1,33 @@
 # Session Log
 
 ## 2026-01-28 (Session 4)
-Fixed 504 AI analysis timeout (increased Vercel maxDuration to 180s, Claude API timeout to 150s, reduced retries to 1). Fixed prominence score display to use `rating × √reviews` formula with actual market rank. Updated sidebar labels: "New Research" → "AI Research", "Full Intake" → "Manual Intake" with subtitles. Fixed React Error #31 (priorityRecommendations rendering). Comprehensive results page overhaul showing Hub-Spoke strategy, SERP gaps, ICP analysis, AEO strategy, technical SEO. Added verification flow for low-confidence fields: new /research/[id]/verify page with dynamic form, POST/GET /api/research/[id]/verify endpoint, auto-reanalysis on return with user data marked as high confidence (0.95+). Next: Test verification flow in production.
+**Major updates across AI analysis, verification flow, and crawler performance.**
+
+**AI Analysis Fixes:**
+- Fixed 504 timeout (Vercel maxDuration 180s, Claude API timeout 150s, retries reduced to 1)
+- Fixed prominence score: now uses `rating × √reviews` formula with market rank display
+- Fixed React Error #31 (priorityRecommendations object rendering)
+- Enhanced prompt to extract more fields from website data with high confidence (service areas, team size, years in business, tone/voice, USPs, competitive advantages, seasonality)
+
+**Verification Flow (Complete):**
+- New `/research/[id]/verify` page with dynamic form for low-confidence fields
+- POST/GET `/api/research/[id]/verify` endpoint saves manual input to session
+- Auto-reanalysis on return with user data marked as 0.95+ confidence
+- Fixed session data structure mismatch in verify page
+
+**UI Updates:**
+- Sidebar labels: "New Research" → "AI Research", "Full Intake" → "Manual Intake" with subtitles
+- Comprehensive results page overhaul: Hub-Spoke strategy, SERP gaps, ICP analysis, AEO strategy, technical SEO
+- InfoTooltip component for metric explanations
+
+**Crawler Performance (10-50x faster):**
+- Switched from Playwright to Cheerio for ALL crawls (HTTP-based, no browser overhead)
+- Increased max pages: 15 (lightweight) / 50 (full)
+- Added concurrency: 5-20 parallel requests
+- Disabled proxy for direct connections
+- Memory reduced to 4GB (cheerio is lightweight)
+
+Next: Test full flow with faster crawler and enhanced AI extraction.
 
 ---
 

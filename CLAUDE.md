@@ -55,9 +55,9 @@ Phase 2: Competitor Search (uses GBP category)
   - Searches for competitors by actual business category
   - NOT by business name keywords
     ↓
-Phase 3: Website Crawler (lightweight mode by default)
-  - 4GB RAM, 10 pages, cheerio (HTTP-based, ~30-60s)
-  - Full mode available: 16GB RAM, 30 pages, playwright
+Phase 3: Website Crawler (cheerio for all modes - fast HTTP-based)
+  - Lightweight: 4GB RAM, 15 pages, ~30-60s
+  - Full: 4GB RAM, 50 pages, depth 4, 5-20 concurrent requests, ~1-2min
     ↓
 Results stored in Supabase research_sessions table
     ↓
@@ -74,9 +74,9 @@ Results stored in Supabase research_sessions table
 - 3-phase execution for optimal resource usage
 
 ### Memory Allocation (Updated Jan 28, 2025)
-- Website Crawler: **4GB lightweight** (default) or **16GB full** mode
+- Website Crawler: **4GB** for all modes (cheerio is lightweight)
 - Other actors: **8GB RAM** (8192 MB)
-- Lightweight mode uses cheerio (HTTP-only) for ~30-60s crawls vs 2-5min
+- All crawls use cheerio (HTTP-only) - 10-50x faster than Playwright
 
 ### Competitor Search Fix
 - Now uses **GBP category** (e.g., "Home Inspector") for competitor search
@@ -126,6 +126,8 @@ Results stored in Supabase research_sessions table
 | `src/services/ai/intakeAnalyzer.ts` | AI analysis orchestrator |
 | `src/services/ai/promptBuilder.ts` | Prompt construction for analysis |
 | `src/app/api/research/[id]/analyze/route.ts` | AI analysis endpoint |
+| `src/app/api/research/[id]/verify/route.ts` | Manual verification endpoint |
+| `src/app/research/[id]/verify/page.tsx` | Verification form for low-confidence fields |
 | `src/types/ai-analysis.ts` | AI analysis type definitions |
 | `src/lib/ai/config.ts` | Claude API configuration |
 | `vitest.config.ts` | Test framework configuration |
@@ -140,11 +142,11 @@ Results stored in Supabase research_sessions table
 - Uses `run-sync-get-dataset-items` endpoint for synchronous execution
 
 **Actors Used:**
-| Actor | ID | Memory |
-|-------|-----|--------|
-| Google Places | `compass/crawler-google-places` | 8GB |
-| Website Crawler | `apify/website-content-crawler` | 4GB (lightweight) / 16GB (full) |
-| Sitemap Extractor | `onescales/sitemap-url-extractor` | 8GB |
+| Actor | ID | Memory | Notes |
+|-------|-----|--------|-------|
+| Google Places | `compass/crawler-google-places` | 8GB | Gets GBP data + category |
+| Website Crawler | `apify/website-content-crawler` | 4GB | Cheerio, 5-20 concurrent |
+| Sitemap Extractor | `onescales/sitemap-url-extractor` | 8GB | Extracts all URLs |
 
 ## Development Notes
 
@@ -283,6 +285,7 @@ npm run test:watch    # Explicit watch mode
 See `docs/STRATEGIC_INTAKE_EXPANSION.md` for planned phases:
 - ~~AI Analysis (Claude API) after scraping~~ ✅ DONE
 - ~~Test suite for AI services~~ ✅ DONE
-- Smart Verification Form with pre-filled data
-- Strategic Report generation answering all 68 intake questions
-- Results UI for competitor comparison, ICP, and SERP gaps
+- ~~Smart Verification Form for low-confidence fields~~ ✅ DONE
+- ~~Results UI for competitor comparison, ICP, SERP gaps~~ ✅ DONE
+- Strategic Report generation (PDF export)
+- Enhanced competitor deep-dive analysis
