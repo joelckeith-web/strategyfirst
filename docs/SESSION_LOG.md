@@ -1,5 +1,10 @@
 # Session Log
 
+## 2026-01-28 (Session 4)
+Fixed 504 AI analysis timeout (increased Vercel maxDuration to 180s, Claude API timeout to 150s, reduced retries to 1). Fixed prominence score display to use `rating × √reviews` formula with actual market rank. Updated sidebar labels: "New Research" → "AI Research", "Full Intake" → "Manual Intake" with subtitles. Fixed React Error #31 (priorityRecommendations rendering). Comprehensive results page overhaul showing Hub-Spoke strategy, SERP gaps, ICP analysis, AEO strategy, technical SEO. Added verification flow for low-confidence fields: new /research/[id]/verify page with dynamic form, POST/GET /api/research/[id]/verify endpoint, auto-reanalysis on return with user data marked as high confidence (0.95+). Next: Test verification flow in production.
+
+---
+
 ## 2026-01-28 (Session 3)
 Added comprehensive Vitest test suite for Anthropic API integration: 121 tests across 4 files with 97.8% coverage. Tests cover config helpers (token estimation, cost calculation, retry delays), Claude client (success/error handling, retries, timeouts), intake analyzer (full analysis flow, fallbacks, strategic insights), and prompt builder (system prompt construction, data context). Created mock fixtures for API responses and research data. Updated CLAUDE.md with testing documentation.
 
