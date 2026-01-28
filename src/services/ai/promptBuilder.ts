@@ -973,6 +973,55 @@ export function buildDataContext(input: AIAnalysisInput): string {
   context += '4. **Assess Hub+Spoke content architecture** - evaluate content depth and structure\n';
   context += '5. **Evaluate AEO/Entity-First compliance** - score against AEO checklist\n\n';
 
+  context += '## CRITICAL: Extract These Fields FROM WEBSITE DATA (High Confidence)\n\n';
+  context += 'The following fields MUST be extracted directly from the scraped website content.\n';
+  context += 'If found on the website, assign confidence 0.85+ (not low confidence).\n\n';
+
+  context += '### From Service Area / Location Pages:\n';
+  context += '- **serviceAreas**: Look for pages listing counties, cities, neighborhoods served\n';
+  context += '- **primaryServiceArea**: The main geographic focus area\n';
+  context += '- **serviceRadius**: If explicitly stated (e.g., "serving 50-mile radius")\n';
+  context += 'Common patterns: footer location lists, dedicated "Service Areas" or "Areas We Serve" pages, location dropdowns\n\n';
+
+  context += '### From Team / About / Staff Pages:\n';
+  context += '- **teamSize**: COUNT the team members shown on team/staff/about pages\n';
+  context += '- **yearsInBusiness**: Look for "established", "since", "X years of experience", founding date\n';
+  context += '- **expertiseSignals**: Certifications, licenses, credentials mentioned\n';
+  context += 'Common patterns: "Our Team", "Meet the Team", "About Us", team member cards/photos\n\n';
+
+  context += '### From Website Copy (Analyze Tone & Voice):\n';
+  context += '- **brandTone**: Analyze the writing style across pages (Professional/Friendly/Authoritative/Casual/Warm)\n';
+  context += '- **writingStyle**: Is it Formal, Conversational, Technical, or Educational?\n';
+  context += '- **keyMessaging**: What are the repeated themes/messages across pages?\n';
+  context += 'Analyze: headlines, taglines, about page copy, service descriptions, CTAs\n\n';
+
+  context += '### From Homepage / About / Service Pages:\n';
+  context += '- **uniqueSellingPoints**: What do they emphasize as differentiators?\n';
+  context += '- **primaryServices**: Main services prominently featured\n';
+  context += '- **secondaryServices**: Additional/supporting services mentioned\n';
+  context += '- **businessDescription**: Synthesize from about page and homepage\n';
+  context += 'Look for: "Why Choose Us", "What Makes Us Different", featured services, hero sections\n\n';
+
+  context += '### From Competitor Comparison:\n';
+  context += '- **competitiveAdvantages**: Compare client services/features vs competitors\n';
+  context += '  - What does the client offer that competitors do NOT?\n';
+  context += '  - What certifications/credentials does client have that competitors lack?\n';
+  context += '  - Better reviews? More services? Unique specializations?\n\n';
+
+  context += '### Industry + Region Inference:\n';
+  context += '- **seasonality**: Infer from industry norms + geographic location\n';
+  context += '  - Home services in cold climates = winter slowdown\n';
+  context += '  - Real estate follows seasonal patterns (spring/summer peak)\n';
+  context += '  - HVAC = summer AC rush, winter heating rush\n';
+  context += '  - Landscaping = spring-fall peak, winter slowdown\n';
+  context += 'Use industry knowledge + the city/state provided to infer seasonality with 0.7+ confidence\n\n';
+
+  context += '### Fields That REQUIRE Manual Input (Low Confidence OK):\n';
+  context += 'These cannot be found on websites - low confidence is expected:\n';
+  context += '- referralPercentage, clientRetentionRate, averageTransactionValue\n';
+  context += '- currentLeadVolume, conversionRate\n';
+  context += '- All conversion/measurement tracking details\n\n';
+
   context += '## SEO Analysis Requirements\n\n';
   context += 'For each page analyzed, note:\n';
   context += '- Current meta title (if found) and recommended improvement\n';
