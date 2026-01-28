@@ -34,6 +34,7 @@ Design decisions should support the internal agency use case first, while keepin
 - **Apify (direct API integration)** - data scraping actors
 - Vercel (deployment) with `@vercel/functions` for background tasks
 - TypeScript (strict mode)
+- **Vitest** - test framework with 97.8% coverage on AI services
 
 ## Current Architecture (Updated Jan 2025)
 
@@ -127,6 +128,9 @@ Results stored in Supabase research_sessions table
 | `src/app/api/research/[id]/analyze/route.ts` | AI analysis endpoint |
 | `src/types/ai-analysis.ts` | AI analysis type definitions |
 | `src/lib/ai/config.ts` | Claude API configuration |
+| `vitest.config.ts` | Test framework configuration |
+| `src/test/setup.ts` | Global test setup |
+| `src/test/fixtures/mockResponses.ts` | Mock API responses for tests |
 
 ## Apify Integration
 
@@ -159,6 +163,13 @@ npm run dev
 **Deploy:**
 ```bash
 vercel --prod
+```
+
+**Run tests:**
+```bash
+npm test              # Watch mode
+npm run test:run      # Single run
+npm run test:coverage # With coverage report
 ```
 
 **Test research flow:**
@@ -244,10 +255,34 @@ This analyzes scraped data using Claude 3.5 Sonnet and produces comprehensive in
 node scripts/test-ai-analysis.mjs [sessionId]
 ```
 
+## Testing (Jan 28, 2025)
+
+### Test Suite Overview
+- **Framework:** Vitest with v8 coverage
+- **121 tests** across 4 test files
+- **97.8% coverage** on AI services
+
+### Test Files
+| File | Tests | Coverage |
+|------|-------|----------|
+| `src/lib/ai/config.test.ts` | 27 | Token estimation, cost calculation, retry delays |
+| `src/services/ai/claudeClient.test.ts` | 26 | API client, errors, retries, timeouts |
+| `src/services/ai/intakeAnalyzer.test.ts` | 28 | Analysis flow, fallbacks, strategic insights |
+| `src/services/ai/promptBuilder.test.ts` | 40 | System prompt, data context, token estimation |
+
+### Running Tests
+```bash
+npm test              # Watch mode (interactive)
+npm run test:run      # Single run
+npm run test:coverage # With coverage report
+npm run test:watch    # Explicit watch mode
+```
+
 ## Future Expansion
 
 See `docs/STRATEGIC_INTAKE_EXPANSION.md` for planned phases:
 - ~~AI Analysis (Claude API) after scraping~~ ✅ DONE
+- ~~Test suite for AI services~~ ✅ DONE
 - Smart Verification Form with pre-filled data
 - Strategic Report generation answering all 68 intake questions
 - Results UI for competitor comparison, ICP, and SERP gaps
