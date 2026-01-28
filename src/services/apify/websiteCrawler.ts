@@ -43,8 +43,8 @@ export async function crawlWebsite(
   // Memory: 4GB for cheerio, 16GB for playwright (reduced from 32GB)
   const memory = isLightweight ? 4096 : 16384;
 
-  // Timeout: 2 min for lightweight, 5 min for full (reduced from 15)
-  const timeout = isLightweight ? 120 : 300;
+  // Timeout: 3 min for lightweight, 10 min for full (increased for larger sites)
+  const timeout = isLightweight ? 180 : 600;
 
   const input: WebsiteCrawlerInput = {
     startUrls: [{ url }],
