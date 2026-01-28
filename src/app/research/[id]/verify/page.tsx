@@ -218,13 +218,15 @@ export default function VerifyPage() {
         }
         const data = await response.json();
 
-        if (!data.session) {
+        if (!data.sessionId) {
           throw new Error('Session not found');
         }
 
-        setBusinessName(data.session.input?.businessName || 'Business');
+        const input = data.input as { businessName?: string } | undefined;
+        setBusinessName(input?.businessName || 'Business');
 
-        const aiAnalysis = data.session.results?.aiAnalysis;
+        const results = data.results as { aiAnalysis?: { categories?: Record<string, unknown> } } | undefined;
+        const aiAnalysis = results?.aiAnalysis;
         if (!aiAnalysis?.categories) {
           throw new Error('AI analysis not found. Please run analysis first.');
         }
