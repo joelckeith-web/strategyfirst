@@ -31,10 +31,10 @@ export const DEFAULT_MODEL: ClaudeModel = CLAUDE_MODELS.SONNET;
 export const API_CONFIG = {
   baseUrl: 'https://api.anthropic.com/v1',
   version: '2023-06-01',
-  maxRetries: 3,
+  maxRetries: 1, // Reduced - each attempt can take 2+ min, limited by Vercel function timeout
   initialRetryDelayMs: 1000,
   maxRetryDelayMs: 30000,
-  timeoutMs: 120000, // 2 minutes - analysis can take time
+  timeoutMs: 150000, // 2.5 minutes - allow time for large analyses
 } as const;
 
 /**
