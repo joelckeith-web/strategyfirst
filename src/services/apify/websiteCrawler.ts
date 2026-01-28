@@ -22,8 +22,11 @@ export interface CrawlWebsiteOutput {
  * Crawl a website and extract content
  *
  * Performance options:
- * - lightweight: true = 10 pages, depth 2, cheerio (fast HTTP scraper) - ~30-60s
- * - lightweight: false = 30 pages, depth 3, playwright:firefox - ~2-5min
+ * - lightweight: true = 15 pages, depth 2, cheerio - ~30-60s
+ * - lightweight: false = 50 pages, depth 4, cheerio - ~1-2min
+ *
+ * Using cheerio (HTTP-based) for all crawls - 10-50x faster than Playwright.
+ * Playwright only needed for heavy JS-rendered SPAs (rare for local businesses).
  */
 export async function crawlWebsite(
   url: string,
@@ -33,32 +36,37 @@ export async function crawlWebsite(
 
   // Lightweight mode for faster initial analysis
   const isLightweight = options.lightweight ?? false;
-  const maxPages = options.maxPages || (isLightweight ? 10 : 30);
-  const maxDepth = options.maxDepth || (isLightweight ? 2 : 3);
+  const maxPages = options.maxPages || (isLightweight ? 15 : 50);
+  const maxDepth = options.maxDepth || (isLightweight ? 2 : 4);
 
-  // Use cheerio for lightweight (HTTP-based, very fast)
-  // Use playwright:firefox for full crawl (lighter than chrome, still handles JS)
-  const crawlerType = isLightweight ? 'cheerio' : 'playwright:firefox';
+  // Use cheerio for ALL crawls - HTTP-based, extremely fast
+  // Only switch to playwright if site requires JS rendering (rare)
+  const crawlerType = 'cheerio';
 
-  // Memory: 4GB for cheerio, 32GB for playwright (increased for larger sites)
-  const memory = isLightweight ? 4096 : 32768;
+  // Memory: 4GB for cheerio (lightweight on resources)
+  const memory = 4096;
 
-  // Timeout: 3 min for lightweight, 15 min for full (increased for larger sites)
-  const timeout = isLightweight ? 180 : 900;
+  // Timeout: 2 min for lightweight, 5 min for full (cheerio is fast)
+  const timeout = isLightweight ? 120 : 300;
 
   const input: WebsiteCrawlerInput = {
     startUrls: [{ url }],
     maxCrawlPages: maxPages,
     maxCrawlDepth: maxDepth,
     crawlerType,
+    // Skip proxy for faster direct connections (most business sites don't need it)
     proxyConfiguration: {
-      useApifyProxy: true,
+      useApifyProxy: false,
     },
-    // Always save HTML for structured data detection, skip screenshots for faster processing
+    // Save HTML for structured data detection, skip screenshots
     saveHtml: true,
     saveScreenshots: false,
-    // Increase request timeout for slow pages
-    requestHandlerTimeoutSecs: 60,
+    // Request settings for speed
+    requestHandlerTimeoutSecs: 30,
+    // Concurrency - crawl multiple pages simultaneously
+    maxConcurrency: 20,
+    // Don't wait between requests
+    minConcurrency: 5,
   };
 
   if (options.includePatterns) {

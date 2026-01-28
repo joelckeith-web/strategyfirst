@@ -38,6 +38,10 @@ export interface WebsiteCrawlerInput {
   saveScreenshots?: boolean;
   /** Timeout for each page request in seconds (default 30) */
   requestHandlerTimeoutSecs?: number;
+  /** Maximum concurrent requests */
+  maxConcurrency?: number;
+  /** Minimum concurrent requests */
+  minConcurrency?: number;
 }
 
 export interface WebsiteCrawlerResult {
