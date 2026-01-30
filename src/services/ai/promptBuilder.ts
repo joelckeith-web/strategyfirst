@@ -913,17 +913,23 @@ export function buildDataContext(input: AIAnalysisInput): string {
     context += '## Google Business Profile Data\nNo GBP data available - recommend claiming/optimizing GBP.\n\n';
   }
 
-  // Sitemap data
+  // Sitemap data - raw URLs for AI to categorize
   if (input.sitemap && Object.keys(input.sitemap).length > 0) {
-    context += '## Sitemap Analysis\n';
+    context += '## Sitemap Data (Raw URLs)\n';
+    context += '**IMPORTANT:** You must analyze these URLs and categorize them based on URL patterns AND titles.\n';
+    context += 'Do NOT rely on pre-categorized data - analyze each URL yourself.\n\n';
     context += '```json\n' + JSON.stringify(input.sitemap, null, 2) + '\n```\n\n';
   } else {
     context += '## Sitemap Analysis\nNo sitemap found - this is a technical SEO issue to address.\n\n';
   }
 
-  // Website crawl data
+  // Website crawl data - pages with titles for AI categorization
   if (input.websiteCrawl && Object.keys(input.websiteCrawl).length > 0) {
-    context += '## Website Crawl Data\n';
+    context += '## Website Crawl Data (Pages with Titles)\n';
+    context += '**IMPORTANT:** Analyze each page title and URL to determine page type.\n';
+    context += 'Service pages may NOT have "service" in the URL - look at the TITLE.\n';
+    context += 'Example: "/hvac-repair" with title "HVAC Repair Services" = SERVICE PAGE\n';
+    context += 'Example: "/our-work" with title "Our Recent Projects" = PORTFOLIO PAGE\n\n';
     context += '```json\n' + JSON.stringify(input.websiteCrawl, null, 2) + '\n```\n\n';
   } else {
     context += '## Website Crawl Data\nNo website crawl data available.\n\n';
@@ -1053,9 +1059,33 @@ export function buildDataContext(input: AIAnalysisInput): string {
   context += '- Consideration stage content (solution comparison, how-to)\n';
   context += '- Decision stage content (commercial, transactional)\n\n';
 
+  context += '## CRITICAL: Page Categorization (YOU Must Analyze)\n\n';
+  context += '**DO NOT trust URL patterns alone.** Analyze page TITLES to determine type:\n\n';
+  context += '### Service Page Indicators (in title):\n';
+  context += '- Contains service name: "HVAC Repair", "Plumbing Services", "Home Inspection"\n';
+  context += '- Action words: "Repair", "Installation", "Maintenance", "Cleaning"\n';
+  context += '- Location + Service: "Phoenix AC Repair", "Dallas Plumbing"\n';
+  context += '- May be at URLs like: /hvac, /plumbing, /what-we-do, /our-services, /solutions\n\n';
+  context += '### Blog/Article Indicators (in title):\n';
+  context += '- Question format: "How to...", "What is...", "Why..."\n';
+  context += '- Educational: "Guide to...", "Tips for...", "Understanding..."\n';
+  context += '- Date references in title or URL\n';
+  context += '- May be at: /blog, /news, /articles, /resources, /tips, /guides\n\n';
+  context += '### Location Page Indicators:\n';
+  context += '- City/State in title: "Services in Phoenix, AZ"\n';
+  context += '- Area references: "Serving the Greater Phoenix Area"\n';
+  context += '- May be at: /locations, /service-areas, /[city-name]\n\n';
+  context += '### Other Page Types:\n';
+  context += '- About: Company info, team, history\n';
+  context += '- Contact: Contact forms, phone, address\n';
+  context += '- Portfolio/Gallery: Past work, projects, case studies\n';
+  context += '- FAQ: Frequently asked questions\n';
+  context += '- Pricing: Rates, costs, quotes\n\n';
+  context += '**Count and report actual page types based on your analysis.**\n\n';
+
   context += '## Service Page Analysis\n\n';
   context += 'For each service mentioned in GBP or website:\n';
-  context += '- Does a dedicated page exist?\n';
+  context += '- Does a dedicated page exist? (Match by TITLE, not just URL)\n';
   context += '- What is the estimated word count? (Flag if under 1,000 as "thin")\n';
   context += '- If yes: Does it meet spoke page standards? What\'s missing?\n';
   context += '- If no: Provide exact page spec following spoke page structure\n';

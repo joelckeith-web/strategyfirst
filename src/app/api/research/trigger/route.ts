@@ -274,18 +274,19 @@ async function triggerApifyResearch(
       const sitemapResult = await extractSitemap(input.website);
 
       if (sitemapResult.success && sitemapResult.urls.length > 0) {
-        const analysis = analyzeSitemapStructure(sitemapResult.urls);
+        // Store raw URLs for AI to analyze - AI will categorize based on URL + title patterns
+        // Pass up to 200 URLs so AI has full visibility into site structure
         return {
           success: true,
           data: {
-            totalPages: analysis.totalPages,
-            pageTypes: analysis.pageTypes,
-            hasServicePages: analysis.hasServicePages,
-            hasBlog: analysis.hasBlog,
-            hasLocationPages: analysis.hasLocationPages,
-            recentlyUpdated: analysis.recentlyUpdated,
-            // Store more URLs for seeding the website crawler
-            urls: sitemapResult.urls.slice(0, 100).map(u => u.url),
+            totalPages: sitemapResult.urls.length,
+            // Store ALL URLs for AI analysis (AI will categorize them intelligently)
+            urls: sitemapResult.urls.slice(0, 200).map(u => ({
+              url: u.url,
+              lastmod: u.lastmod || null,
+            })),
+            // Note: Page categorization will be done by AI during analysis phase
+            // based on URL patterns AND page titles/content, not just URL matching
           },
         };
       }
@@ -518,10 +519,14 @@ async function triggerApifyResearch(
             title: homePage?.title || input.businessName,
             description: homePage?.metadata?.description || '',
             totalPages: crawlResult.totalPages,
-            pages: crawlResult.pages.slice(0, 10).map(p => ({
+            // Store ALL crawled pages for AI to analyze and categorize
+            // AI will determine page types based on title + URL + content patterns
+            pages: crawlResult.pages.map(p => ({
               url: p.url,
               title: p.title || '',
               description: p.metadata?.description || '',
+              // Estimate word count from text length (rough: 5 chars per word)
+              estimatedWordCount: p.text ? Math.round(p.text.length / 5) : 0,
             })),
           },
         };
@@ -544,54 +549,23 @@ async function triggerApifyResearch(
     errors.push({ step: 'website', code: 'ERROR', message: websiteRes.error || 'Unknown error' });
   }
 
-  // Supplement sitemap data with crawler data when sitemap is empty or unavailable
+  // If sitemap was empty, create placeholder from crawler data
+  // Note: Page categorization will be done by AI during analysis phase
   const currentSitemap = accumulatedResults.sitemap as {
     totalPages?: number;
-    pageTypes?: Record<string, number>;
-    hasServicePages?: boolean;
-    hasBlog?: boolean;
-    hasLocationPages?: boolean;
-    recentlyUpdated?: number;
+    urls?: Array<{ url: string }>;
   } | undefined;
 
   if (websiteRes.success && websiteRes.data && (!currentSitemap?.totalPages || currentSitemap.totalPages === 0)) {
-    // Derive site structure from crawler data
     const crawlerPages = websiteRes.data.pages as Array<{ url: string; title: string }> || [];
-    const pageTypes: Record<string, number> = {};
-    let hasServicePages = false;
-    let hasBlog = false;
-    let hasLocationPages = false;
-
-    for (const page of crawlerPages) {
-      const urlLower = page.url.toLowerCase();
-      if (urlLower.includes('/service') || urlLower.includes('/services') || urlLower.includes('/what-we-do')) {
-        pageTypes['services'] = (pageTypes['services'] || 0) + 1;
-        hasServicePages = true;
-      } else if (urlLower.includes('/blog') || urlLower.includes('/news') || urlLower.includes('/article') || urlLower.includes('/post')) {
-        pageTypes['blog'] = (pageTypes['blog'] || 0) + 1;
-        hasBlog = true;
-      } else if (urlLower.includes('/location') || urlLower.includes('/area') || urlLower.includes('/city') || urlLower.includes('/service-area')) {
-        pageTypes['locations'] = (pageTypes['locations'] || 0) + 1;
-        hasLocationPages = true;
-      } else if (urlLower.includes('/about')) {
-        pageTypes['about'] = (pageTypes['about'] || 0) + 1;
-      } else if (urlLower.includes('/contact')) {
-        pageTypes['contact'] = (pageTypes['contact'] || 0) + 1;
-      } else {
-        pageTypes['other'] = (pageTypes['other'] || 0) + 1;
-      }
-    }
-
     accumulatedResults.sitemap = {
       totalPages: websiteRes.data.totalPages || crawlerPages.length,
-      pageTypes,
-      hasServicePages,
-      hasBlog,
-      hasLocationPages,
-      recentlyUpdated: 0, // Can't determine from crawler data
+      // Store crawler-discovered URLs for AI analysis
+      urls: crawlerPages.map(p => ({ url: p.url, lastmod: null })),
       derivedFromCrawler: true,
+      note: 'No sitemap.xml found - URLs discovered via crawling. AI will categorize pages during analysis.',
     };
-    console.log('Sitemap data derived from crawler:', accumulatedResults.sitemap);
+    console.log('Sitemap placeholder created from crawler data');
   }
 
   // Generate SEO audit from collected data
