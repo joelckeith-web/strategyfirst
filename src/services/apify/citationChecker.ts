@@ -110,6 +110,7 @@ export async function checkCitations(
 
   console.log(`Starting citation check for: ${input.businessName}`);
   console.log(`Location: ${input.city}, ${input.state}`);
+  console.log(`Citation checker input:`, JSON.stringify(actorInput, null, 2));
 
   try {
     const { items } = await client.callActor<Record<string, unknown>, CitationResult>(
@@ -118,8 +119,29 @@ export async function checkCitations(
       { waitForFinish: timeout, timeout, memory }
     );
 
-    // Process results
-    const citations = items || [];
+    // Log raw response for debugging
+    console.log(`Citation checker raw response: ${items?.length || 0} items`);
+    if (items && items.length > 0) {
+      console.log('First item structure:', JSON.stringify(items[0], null, 2));
+    }
+
+    // Process results - handle both direct array and nested structures
+    let citations: CitationResult[] = [];
+    if (Array.isArray(items) && items.length > 0) {
+      // Map items to our expected format, handling different field names
+      citations = (items as unknown as Record<string, unknown>[]).map((item) => ({
+        directory: (item.directory || item.source || item.platform || item.name || 'Unknown') as string,
+        found: Boolean(item.found ?? item.exists ?? item.listed ?? false),
+        listingUrl: (item.listingUrl || item.url || item.listing_url) as string | undefined,
+        napData: (item.napData || item.nap) as CitationResult['napData'],
+        napConsistent: (item.napConsistent ?? item.nap_consistent) as boolean | undefined,
+        inconsistencies: (item.inconsistencies || item.issues || []) as string[],
+        suggestedCorrections: item.suggestedCorrections as string[] | undefined,
+        confidence: item.confidence as number | undefined,
+      }));
+    }
+
+    console.log(`Processed ${citations.length} citations`);
     const found = citations.filter(c => c.found);
     const withIssues = citations.filter(c => c.found && !c.napConsistent);
 

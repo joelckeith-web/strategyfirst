@@ -612,13 +612,24 @@ async function triggerApifyResearch(
 
   // Get GBP data for citation check input
   const gbpForCitations = accumulatedResults.gbp as {
+    name?: string;
     phone?: string;
     address?: string;
   } | undefined;
 
+  // Log what data we're sending to citation checker
+  console.log('GBP data available for citations:', {
+    name: gbpForCitations?.name,
+    phone: gbpForCitations?.phone,
+    address: gbpForCitations?.address,
+  });
+
+  // Use the business name from GBP if available (more accurate), otherwise use input
+  const citationBusinessName = gbpForCitations?.name || input.businessName;
+
   try {
     const citationResult = await checkCitations({
-      businessName: input.businessName,
+      businessName: citationBusinessName,
       city: input.city,
       state: input.state,
       phone: gbpForCitations?.phone,
@@ -627,8 +638,8 @@ async function triggerApifyResearch(
       streetAddress: gbpForCitations?.address?.split(',')[0],
     });
 
-    if (citationResult.success && citationResult.citations.length > 0) {
-      // Use real citation data
+    if (citationResult.success) {
+      // Use real citation data - even if 0 found, that's valid data
       accumulatedResults.citations = transformCitationResults(citationResult);
       accumulatedResults.citationSummary = {
         totalChecked: citationResult.totalDirectoriesChecked,
@@ -641,28 +652,30 @@ async function triggerApifyResearch(
       completedSteps.push('citations');
       console.log(`Citation check completed: ${citationResult.directoriesFound}/${citationResult.totalDirectoriesChecked} found, ${citationResult.napConsistencyScore}% consistent`);
     } else {
-      // Fallback to placeholder data if citation check fails
-      console.log('Citation check failed or returned no data, using placeholder');
-      accumulatedResults.citations = [
-        { source: 'Google Business Profile', found: completedSteps.includes('gbp'), napConsistent: true },
-        { source: 'Yelp', found: false, napConsistent: null },
-        { source: 'Facebook', found: false, napConsistent: null },
-        { source: 'BBB', found: false, napConsistent: null },
-        { source: 'Yellow Pages', found: false, napConsistent: null },
-      ];
+      // Only use placeholder if the actor actually failed
+      console.log('Citation check failed:', citationResult.error);
+      accumulatedResults.citations = [];
+      accumulatedResults.citationSummary = {
+        totalChecked: 0,
+        found: 0,
+        withIssues: 0,
+        napConsistencyScore: 0,
+        error: citationResult.error || 'Citation check failed',
+      };
       failedSteps.push('citations');
-      errors.push({ step: 'citations', code: 'FALLBACK', message: citationResult.error || 'Citation check returned no data' });
+      errors.push({ step: 'citations', code: 'FAILED', message: citationResult.error || 'Citation check failed' });
     }
   } catch (citationError) {
-    // Fallback to placeholder data on error
+    // Actor threw an exception
     console.error('Citation check error:', citationError);
-    accumulatedResults.citations = [
-      { source: 'Google Business Profile', found: completedSteps.includes('gbp'), napConsistent: true },
-      { source: 'Yelp', found: false, napConsistent: null },
-      { source: 'Facebook', found: false, napConsistent: null },
-      { source: 'BBB', found: false, napConsistent: null },
-      { source: 'Yellow Pages', found: false, napConsistent: null },
-    ];
+    accumulatedResults.citations = [];
+    accumulatedResults.citationSummary = {
+      totalChecked: 0,
+      found: 0,
+      withIssues: 0,
+      napConsistencyScore: 0,
+      error: citationError instanceof Error ? citationError.message : 'Unknown error',
+    };
     failedSteps.push('citations');
     errors.push({ step: 'citations', code: 'ERROR', message: citationError instanceof Error ? citationError.message : 'Unknown error' });
   }
