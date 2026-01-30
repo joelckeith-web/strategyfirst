@@ -90,28 +90,24 @@ export async function checkCitations(
   const client = getApifyClient();
 
   // Build actor input - field names must match actor's expected schema
-  // Actor expects: businessName, address (full street address)
+  // Required: businessName, city, state
+  // Optional: address (street only), phone, website, platforms, providedUrls, anthropicApiKey, enableAiAnalysis
   const actorInput: Record<string, unknown> = {
     businessName: input.businessName,
   };
 
-  // Build full address string - actor expects 'address' not 'streetAddress'
-  // Format: "123 Main St Suite 100" or "123 Main St, City, State ZIP"
-  const addressParts: string[] = [];
-  if (input.streetAddress) addressParts.push(input.streetAddress);
-  if (input.city) addressParts.push(input.city);
-  if (input.state) addressParts.push(input.state);
-  if (input.zipCode) addressParts.push(input.zipCode);
+  // City and State are REQUIRED separate fields
+  if (input.city) actorInput.city = input.city;
+  if (input.state) actorInput.state = input.state;
 
-  if (addressParts.length > 0) {
-    actorInput.address = addressParts.join(', ');
-  }
+  // Address is just the street address (optional)
+  if (input.streetAddress) actorInput.address = input.streetAddress;
 
-  // Add other optional fields
+  // Other optional fields
   if (input.phone) actorInput.phone = input.phone;
   if (input.website) actorInput.website = input.website;
-  if (input.preknownUrls) actorInput.preknownUrls = input.preknownUrls;
-  if (input.enableAiSuggestions) actorInput.enableAiSuggestions = input.enableAiSuggestions;
+  if (input.preknownUrls) actorInput.providedUrls = input.preknownUrls; // Note: field name is providedUrls
+  if (input.enableAiSuggestions) actorInput.enableAiAnalysis = input.enableAiSuggestions; // Note: field name is enableAiAnalysis
 
   // Memory: 4GB, Timeout: 10 minutes (checking 36+ directories takes time)
   const memory = 4096;
@@ -134,20 +130,51 @@ export async function checkCitations(
       console.log('First item structure:', JSON.stringify(items[0], null, 2));
     }
 
-    // Process results - handle both direct array and nested structures
+    // Process results - actor returns { summary, citations, aiAnalysis? }
+    // Or it might return the citations array directly
     let citations: CitationResult[] = [];
-    if (Array.isArray(items) && items.length > 0) {
-      // Map items to our expected format, handling different field names
-      citations = (items as unknown as Record<string, unknown>[]).map((item) => ({
-        directory: (item.directory || item.source || item.platform || item.name || 'Unknown') as string,
-        found: Boolean(item.found ?? item.exists ?? item.listed ?? false),
-        listingUrl: (item.listingUrl || item.url || item.listing_url) as string | undefined,
-        napData: (item.napData || item.nap) as CitationResult['napData'],
-        napConsistent: (item.napConsistent ?? item.nap_consistent) as boolean | undefined,
-        inconsistencies: (item.inconsistencies || item.issues || []) as string[],
-        suggestedCorrections: item.suggestedCorrections as string[] | undefined,
-        confidence: item.confidence as number | undefined,
-      }));
+    let rawData = items as unknown;
+
+    // Handle both array response and object with citations property
+    let citationsArray: Record<string, unknown>[] = [];
+    if (Array.isArray(rawData)) {
+      // Check if first item has 'citations' property (wrapped response)
+      if (rawData.length === 1 && rawData[0] && typeof rawData[0] === 'object' && 'citations' in rawData[0]) {
+        citationsArray = (rawData[0] as Record<string, unknown>).citations as Record<string, unknown>[];
+        console.log('Found wrapped response with citations array');
+      } else {
+        citationsArray = rawData as Record<string, unknown>[];
+      }
+    }
+
+    if (citationsArray.length > 0) {
+      // Map actor output to our CitationResult format
+      // Actor returns: platform, status (correct/incorrect/missing/found), url, nameMatch, addressMatch, phoneMatch
+      citations = citationsArray.map((item) => {
+        const status = (item.status as string) || '';
+        const isFound = status === 'correct' || status === 'incorrect' || status === 'found';
+        const isConsistent = status === 'correct';
+
+        // Build inconsistencies list from match fields
+        const inconsistencies: string[] = [];
+        if (item.nameMatch === false) inconsistencies.push('Business name mismatch');
+        if (item.addressMatch === false) inconsistencies.push('Address mismatch');
+        if (item.phoneMatch === false) inconsistencies.push('Phone number mismatch');
+
+        return {
+          directory: (item.platform || item.directory || item.source || 'Unknown') as string,
+          found: isFound,
+          listingUrl: (item.url || item.listingUrl) as string | undefined,
+          napData: {
+            name: item.foundName as string | undefined,
+            address: item.foundAddress as string | undefined,
+            phone: item.foundPhone as string | undefined,
+          },
+          napConsistent: isFound ? isConsistent : undefined,
+          inconsistencies,
+          confidence: isFound ? (isConsistent ? 1.0 : 0.5) : 0,
+        };
+      });
     }
 
     console.log(`Processed ${citations.length} citations`);
