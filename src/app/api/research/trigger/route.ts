@@ -284,7 +284,8 @@ async function triggerApifyResearch(
             hasBlog: analysis.hasBlog,
             hasLocationPages: analysis.hasLocationPages,
             recentlyUpdated: analysis.recentlyUpdated,
-            urls: sitemapResult.urls.slice(0, 50).map(u => u.url),
+            // Store more URLs for seeding the website crawler
+            urls: sitemapResult.urls.slice(0, 100).map(u => u.url),
           },
         };
       }
@@ -469,12 +470,18 @@ async function triggerApifyResearch(
   // ============================================================
   console.log('Phase 3: Running website crawler with 32GB RAM...');
 
+  // Extract sitemap URLs to seed the crawler
+  const sitemapData = sitemapRes.success && sitemapRes.data ? sitemapRes.data : null;
+  const sitemapUrls = sitemapData?.urls || [];
+
   const websiteTask = async () => {
     try {
-      // Use full mode with Playwright for accurate structured data detection
-      // This crawls 30 pages at depth 3 using playwright:firefox (~2-5min)
-      // Required for JavaScript-heavy sites (Wix, Squarespace, etc.) that inject schema dynamically
-      const crawlResult = await crawlWebsite(input.website, { lightweight: false });
+      // Use full mode with sitemap-seeded URLs for comprehensive coverage
+      // This crawls up to 30 pages using sitemap URLs + homepage as seeds
+      const crawlResult = await crawlWebsite(input.website, {
+        lightweight: false,
+        sitemapUrls: sitemapUrls as string[],
+      });
 
       if (crawlResult.success && crawlResult.pages.length > 0) {
         const homePage = crawlResult.pages.find(p => {

@@ -9,6 +9,8 @@ export interface CrawlWebsiteOptions {
   excludePatterns?: string[];
   /** Use lightweight mode for faster crawling (fewer pages, HTTP-based) */
   lightweight?: boolean;
+  /** Additional URLs from sitemap to ensure important pages are crawled */
+  sitemapUrls?: string[];
 }
 
 export interface CrawlWebsiteOutput {
@@ -50,8 +52,40 @@ export async function crawlWebsite(
   // Timeout: 2 min for lightweight, 8 min for full (allow more time for larger sites)
   const timeout = isLightweight ? 120 : 480;
 
+  // Build start URLs - include homepage plus important sitemap URLs
+  const startUrls: { url: string }[] = [{ url }];
+
+  if (options.sitemapUrls && options.sitemapUrls.length > 0) {
+    // Prioritize important page types from sitemap
+    const priorityPatterns = ['/service', '/about', '/contact', '/blog', '/faq', '/pricing', '/team'];
+    const priorityUrls: string[] = [];
+    const otherUrls: string[] = [];
+
+    for (const sitemapUrl of options.sitemapUrls) {
+      const urlLower = sitemapUrl.toLowerCase();
+      // Skip homepage (already added)
+      if (urlLower.endsWith('/') && new URL(sitemapUrl).pathname === '/') continue;
+
+      if (priorityPatterns.some(p => urlLower.includes(p))) {
+        priorityUrls.push(sitemapUrl);
+      } else {
+        otherUrls.push(sitemapUrl);
+      }
+    }
+
+    // Add priority URLs first (up to 15), then fill with others
+    const urlsToAdd = [...priorityUrls.slice(0, 15), ...otherUrls.slice(0, 10)];
+    for (const sitemapUrl of urlsToAdd) {
+      if (!startUrls.some(s => s.url === sitemapUrl)) {
+        startUrls.push({ url: sitemapUrl });
+      }
+    }
+
+    console.log(`Seeding crawler with ${startUrls.length} URLs (1 homepage + ${startUrls.length - 1} from sitemap)`);
+  }
+
   const input: WebsiteCrawlerInput = {
-    startUrls: [{ url }],
+    startUrls,
     maxCrawlPages: maxPages,
     maxCrawlDepth: maxDepth,
     crawlerType,
