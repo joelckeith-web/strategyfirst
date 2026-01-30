@@ -89,16 +89,25 @@ export async function checkCitations(
 ): Promise<CitationCheckerOutput> {
   const client = getApifyClient();
 
-  // Build actor input
+  // Build actor input - field names must match actor's expected schema
+  // Actor expects: businessName, address (full street address)
   const actorInput: Record<string, unknown> = {
     businessName: input.businessName,
   };
 
-  // Add optional fields if provided
-  if (input.streetAddress) actorInput.streetAddress = input.streetAddress;
-  if (input.city) actorInput.city = input.city;
-  if (input.state) actorInput.state = input.state;
-  if (input.zipCode) actorInput.zipCode = input.zipCode;
+  // Build full address string - actor expects 'address' not 'streetAddress'
+  // Format: "123 Main St Suite 100" or "123 Main St, City, State ZIP"
+  const addressParts: string[] = [];
+  if (input.streetAddress) addressParts.push(input.streetAddress);
+  if (input.city) addressParts.push(input.city);
+  if (input.state) addressParts.push(input.state);
+  if (input.zipCode) addressParts.push(input.zipCode);
+
+  if (addressParts.length > 0) {
+    actorInput.address = addressParts.join(', ');
+  }
+
+  // Add other optional fields
   if (input.phone) actorInput.phone = input.phone;
   if (input.website) actorInput.website = input.website;
   if (input.preknownUrls) actorInput.preknownUrls = input.preknownUrls;

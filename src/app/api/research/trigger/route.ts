@@ -627,15 +627,40 @@ async function triggerApifyResearch(
   // Use the business name from GBP if available (more accurate), otherwise use input
   const citationBusinessName = gbpForCitations?.name || input.businessName;
 
+  // Parse GBP address into components if available
+  // GBP address format is typically: "123 Main St, City, State ZIP"
+  let streetAddress = '';
+  let citationCity = input.city;
+  let citationState = input.state;
+
+  if (gbpForCitations?.address) {
+    const addressParts = gbpForCitations.address.split(',').map(p => p.trim());
+    if (addressParts.length >= 1) streetAddress = addressParts[0]; // Street
+    if (addressParts.length >= 2) citationCity = addressParts[1]; // City
+    if (addressParts.length >= 3) {
+      // State might include ZIP: "CA 90210"
+      const stateZip = addressParts[2].trim().split(' ');
+      citationState = stateZip[0];
+    }
+  }
+
+  console.log('Citation check input data:', {
+    businessName: citationBusinessName,
+    streetAddress,
+    city: citationCity,
+    state: citationState,
+    phone: gbpForCitations?.phone,
+    website: input.website,
+  });
+
   try {
     const citationResult = await checkCitations({
       businessName: citationBusinessName,
-      city: input.city,
-      state: input.state,
+      streetAddress,
+      city: citationCity,
+      state: citationState,
       phone: gbpForCitations?.phone,
       website: input.website,
-      // Parse address into street if available
-      streetAddress: gbpForCitations?.address?.split(',')[0],
     });
 
     if (citationResult.success) {
