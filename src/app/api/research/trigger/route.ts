@@ -615,6 +615,7 @@ async function triggerApifyResearch(
     name?: string;
     phone?: string;
     address?: string;
+    url?: string; // Google Maps URL for the business
   } | undefined;
 
   // Log what data we're sending to citation checker
@@ -622,6 +623,7 @@ async function triggerApifyResearch(
     name: gbpForCitations?.name,
     phone: gbpForCitations?.phone,
     address: gbpForCitations?.address,
+    url: gbpForCitations?.url,
   });
 
   // Use the business name from GBP if available (more accurate), otherwise use input
@@ -644,6 +646,12 @@ async function triggerApifyResearch(
     }
   }
 
+  // Build providedUrls map if we have the GBP URL
+  const providedUrls: Record<string, string> = {};
+  if (gbpForCitations?.url) {
+    providedUrls['Google Business'] = gbpForCitations.url;
+  }
+
   console.log('Citation check input data:', {
     businessName: citationBusinessName,
     streetAddress,
@@ -651,6 +659,7 @@ async function triggerApifyResearch(
     state: citationState,
     phone: gbpForCitations?.phone,
     website: input.website,
+    providedUrls,
   });
 
   try {
@@ -661,6 +670,8 @@ async function triggerApifyResearch(
       state: citationState,
       phone: gbpForCitations?.phone,
       website: input.website,
+      // Pass known URLs to help actor find listings faster
+      preknownUrls: Object.keys(providedUrls).length > 0 ? providedUrls : undefined,
     });
 
     if (citationResult.success) {
