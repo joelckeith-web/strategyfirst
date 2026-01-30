@@ -473,15 +473,18 @@ async function triggerApifyResearch(
 
   // Extract sitemap URLs to seed the crawler
   const sitemapData = sitemapRes.success && sitemapRes.data ? sitemapRes.data : null;
-  const sitemapUrls = sitemapData?.urls || [];
+  // Extract just the URL strings from sitemap objects
+  const sitemapUrlStrings: string[] = (sitemapData?.urls || []).map(
+    (item: { url: string; lastmod?: string | null }) => item.url
+  );
 
   const websiteTask = async () => {
     try {
       // Use full mode with sitemap-seeded URLs for comprehensive coverage
-      // This crawls up to 30 pages using sitemap URLs + homepage as seeds
+      // This crawls up to 150 pages using sitemap URLs + homepage as seeds
       const crawlResult = await crawlWebsite(input.website, {
         lightweight: false,
-        sitemapUrls: sitemapUrls as string[],
+        sitemapUrls: sitemapUrlStrings,
       });
 
       if (crawlResult.success && crawlResult.pages.length > 0) {
