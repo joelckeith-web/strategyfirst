@@ -91,6 +91,19 @@ Results stored in Supabase research_sessions table
 - Previously was incorrectly using last word of business name (e.g., "Services")
 - Filters out user's own business from competitor results
 
+### AI Analysis Page Categorization Fix (Jan 30, 2025)
+- Fixed: Mock data now includes realistic page URLs, titles, and word counts
+- Added `blogPostCount` field to `WebsiteReadinessFields` type
+- AI can now properly categorize service pages, blog posts, location pages
+- When `APIFY_API_TOKEN` not configured, mock data enables local AI analysis testing
+- Results page reads categorization from `aiAnalysis.categories.websiteReadiness`
+
+### Citation Checker Integration (Jan 30, 2025)
+- Integrated `alizarin_refrigerator-owner/citation-checker-ai` Apify actor
+- Checks NAP consistency across 36+ business directories
+- Phase 4 of research now uses real citation data instead of placeholders
+- Returns: directories found, NAP consistency score, common issues, recommendations
+
 ### Task Display Order (Research Progress UI)
 1. Google Business Profile (parallel with Sitemap)
 2. Sitemap Analysis (parallel with GBP)
@@ -160,10 +173,14 @@ Note: AI Analysis (Claude API) runs after data gathering completes but is not sh
 
 ## Development Notes
 
-- Fallback mock data runs when `APIFY_API_TOKEN` not configured
+- **Fallback mock data** runs when `APIFY_API_TOKEN` not configured
+  - Mock includes 18 realistic pages with URLs, titles, word counts
+  - AI analysis can categorize pages even in mock mode
+  - Look for `_mock: true` flag in data to identify mock results
 - Uses `waitUntil()` from `@vercel/functions` for background processing
 - Results page handles research types: gbp, competitors, website, sitemap, seo, citations, aiAnalysis (AI analysis triggered separately after data gathering)
 - Supabase RLS disabled on research_sessions table for now
+- **AI Analysis confidence thresholds**: High >= 0.7, Low <= 0.4
 
 ## Common Tasks
 
