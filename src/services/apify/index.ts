@@ -19,3 +19,13 @@ export {
   getGooglePlacesResults,
   extractGbpMetrics,
 } from './googlePlaces';
+
+export {
+  checkCitations,
+  startCitationCheck,
+  getCitationResults,
+  transformCitationResults,
+  type CitationCheckerInput,
+  type CitationCheckerOutput,
+  type CitationResult,
+} from './citationChecker';

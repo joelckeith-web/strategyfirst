@@ -154,8 +154,9 @@ Note: AI Analysis (Claude API) runs after data gathering completes but is not sh
 | Actor | ID | Memory | Notes |
 |-------|-----|--------|-------|
 | Google Places | `compass/crawler-google-places` | 8GB | Gets GBP data + category |
-| Website Crawler | `apify/website-content-crawler` | 4GB | Cheerio, 5-20 concurrent |
+| Website Crawler | `apify/website-content-crawler` | 16GB | Cheerio, 5-20 concurrent, 150 pages |
 | Sitemap Extractor | `onescales/sitemap-url-extractor` | 8GB | Extracts all URLs |
+| Citation Checker AI | `alizarin_refrigerator-owner/citation-checker-ai` | 4GB | Checks 36+ directories for NAP consistency |
 
 ## Development Notes
 

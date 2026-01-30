@@ -11,6 +11,7 @@ import {
 } from '@/services/apify/googlePlaces';
 import { crawlWebsite } from '@/services/apify/websiteCrawler';
 import { extractSitemap, analyzeSitemapStructure } from '@/services/apify/sitemapExtractor';
+import { checkCitations, transformCitationResults } from '@/services/apify/citationChecker';
 
 /**
  * Input from the client request
@@ -590,15 +591,81 @@ async function triggerApifyResearch(
   };
   completedSteps.push('seo');
 
-  // Generate citation placeholders
-  accumulatedResults.citations = [
-    { source: 'Google Business Profile', found: completedSteps.includes('gbp'), napConsistent: true },
-    { source: 'Yelp', found: false, napConsistent: null },
-    { source: 'Facebook', found: false, napConsistent: null },
-    { source: 'BBB', found: false, napConsistent: null },
-    { source: 'Yellow Pages', found: false, napConsistent: null },
-  ];
-  completedSteps.push('citations');
+  // ============================================================
+  // PHASE 4: Citation Check (uses real Citation Checker AI actor)
+  // ============================================================
+  console.log('Phase 4: Running citation check...');
+
+  await supabaseAdmin
+    .from('research_sessions')
+    .update({
+      results: accumulatedResults,
+      progress: {
+        currentStep: 'citations',
+        completedSteps,
+        failedSteps,
+        percentage: 85,
+        phase: 'Phase 4: Checking business citations across 36+ directories',
+      },
+    } as never)
+    .eq('id', sessionId);
+
+  // Get GBP data for citation check input
+  const gbpForCitations = accumulatedResults.gbp as {
+    phone?: string;
+    address?: string;
+  } | undefined;
+
+  try {
+    const citationResult = await checkCitations({
+      businessName: input.businessName,
+      city: input.city,
+      state: input.state,
+      phone: gbpForCitations?.phone,
+      website: input.website,
+      // Parse address into street if available
+      streetAddress: gbpForCitations?.address?.split(',')[0],
+    });
+
+    if (citationResult.success && citationResult.citations.length > 0) {
+      // Use real citation data
+      accumulatedResults.citations = transformCitationResults(citationResult);
+      accumulatedResults.citationSummary = {
+        totalChecked: citationResult.totalDirectoriesChecked,
+        found: citationResult.directoriesFound,
+        withIssues: citationResult.directoriesWithIssues,
+        napConsistencyScore: citationResult.napConsistencyScore,
+        commonIssues: citationResult.commonIssues,
+        recommendations: citationResult.recommendations,
+      };
+      completedSteps.push('citations');
+      console.log(`Citation check completed: ${citationResult.directoriesFound}/${citationResult.totalDirectoriesChecked} found, ${citationResult.napConsistencyScore}% consistent`);
+    } else {
+      // Fallback to placeholder data if citation check fails
+      console.log('Citation check failed or returned no data, using placeholder');
+      accumulatedResults.citations = [
+        { source: 'Google Business Profile', found: completedSteps.includes('gbp'), napConsistent: true },
+        { source: 'Yelp', found: false, napConsistent: null },
+        { source: 'Facebook', found: false, napConsistent: null },
+        { source: 'BBB', found: false, napConsistent: null },
+        { source: 'Yellow Pages', found: false, napConsistent: null },
+      ];
+      failedSteps.push('citations');
+      errors.push({ step: 'citations', code: 'FALLBACK', message: citationResult.error || 'Citation check returned no data' });
+    }
+  } catch (citationError) {
+    // Fallback to placeholder data on error
+    console.error('Citation check error:', citationError);
+    accumulatedResults.citations = [
+      { source: 'Google Business Profile', found: completedSteps.includes('gbp'), napConsistent: true },
+      { source: 'Yelp', found: false, napConsistent: null },
+      { source: 'Facebook', found: false, napConsistent: null },
+      { source: 'BBB', found: false, napConsistent: null },
+      { source: 'Yellow Pages', found: false, napConsistent: null },
+    ];
+    failedSteps.push('citations');
+    errors.push({ step: 'citations', code: 'ERROR', message: citationError instanceof Error ? citationError.message : 'Unknown error' });
+  }
 
   // Final update
   const allSteps = ['gbp', 'competitors', 'website', 'sitemap', 'seo', 'citations'];
