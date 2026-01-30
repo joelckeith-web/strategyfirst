@@ -73,10 +73,17 @@ Results stored in Supabase research_sessions table
 - Uses `@vercel/functions` `waitUntil()` for background processing
 - 3-phase execution for optimal resource usage
 
-### Memory Allocation (Updated Jan 28, 2025)
+### Memory Allocation (Updated Jan 30, 2025)
 - Website Crawler: **4GB** for all modes (cheerio is lightweight)
 - Other actors: **8GB RAM** (8192 MB)
 - All crawls use cheerio (HTTP-only) - 10-50x faster than Playwright
+- Uses Apify Proxy for reliability (required by website-content-crawler actor)
+
+### Website Crawler Settings
+- Lightweight mode: 15 pages, depth 2, 2 min timeout
+- Full mode: 30 pages, depth 3, 8 min timeout
+- Concurrency: 3-10 simultaneous requests
+- Request timeout: 60 seconds per page
 
 ### Competitor Search Fix
 - Now uses **GBP category** (e.g., "Home Inspector") for competitor search

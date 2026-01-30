@@ -23,7 +23,7 @@ export interface CrawlWebsiteOutput {
  *
  * Performance options:
  * - lightweight: true = 15 pages, depth 2, cheerio - ~30-60s
- * - lightweight: false = 50 pages, depth 4, cheerio - ~1-2min
+ * - lightweight: false = 30 pages, depth 3, cheerio - ~1-3min
  *
  * Using cheerio (HTTP-based) for all crawls - 10-50x faster than Playwright.
  * Playwright only needed for heavy JS-rendered SPAs (rare for local businesses).
@@ -36,8 +36,9 @@ export async function crawlWebsite(
 
   // Lightweight mode for faster initial analysis
   const isLightweight = options.lightweight ?? false;
-  const maxPages = options.maxPages || (isLightweight ? 15 : 50);
-  const maxDepth = options.maxDepth || (isLightweight ? 2 : 4);
+  // Reduced max pages to prevent timeouts on larger sites
+  const maxPages = options.maxPages || (isLightweight ? 15 : 30);
+  const maxDepth = options.maxDepth || (isLightweight ? 2 : 3);
 
   // Use cheerio for ALL crawls - HTTP-based, extremely fast
   // Only switch to playwright if site requires JS rendering (rare)
@@ -46,27 +47,26 @@ export async function crawlWebsite(
   // Memory: 4GB for cheerio (lightweight on resources)
   const memory = 4096;
 
-  // Timeout: 2 min for lightweight, 5 min for full (cheerio is fast)
-  const timeout = isLightweight ? 120 : 300;
+  // Timeout: 2 min for lightweight, 8 min for full (allow more time for larger sites)
+  const timeout = isLightweight ? 120 : 480;
 
   const input: WebsiteCrawlerInput = {
     startUrls: [{ url }],
     maxCrawlPages: maxPages,
     maxCrawlDepth: maxDepth,
     crawlerType,
-    // Skip proxy for faster direct connections (most business sites don't need it)
+    // Use Apify Proxy for reliability (required by the actor)
     proxyConfiguration: {
-      useApifyProxy: false,
+      useApifyProxy: true,
     },
     // Save HTML for structured data detection, skip screenshots
     saveHtml: true,
     saveScreenshots: false,
-    // Request settings for speed
-    requestHandlerTimeoutSecs: 30,
-    // Concurrency - crawl multiple pages simultaneously
-    maxConcurrency: 20,
-    // Don't wait between requests
-    minConcurrency: 5,
+    // Request settings - allow more time per page for reliability
+    requestHandlerTimeoutSecs: 60,
+    // Concurrency - moderate to avoid overwhelming target servers
+    maxConcurrency: 10,
+    minConcurrency: 3,
   };
 
   if (options.includePatterns) {

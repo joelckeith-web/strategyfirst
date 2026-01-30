@@ -102,28 +102,28 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                   className={`
                     flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
                     ${isActive
-                      ? 'bg-blue-50 text-blue-700'
+                      ? 'bg-[#002366] text-white'
                       : isHighlight
-                      ? 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
-                      : 'text-gray-700 hover:bg-gray-100'
+                      ? 'bg-gradient-to-r from-[#4CC9F0]/10 to-[#9F4CFF]/10 text-[#002366] hover:from-[#4CC9F0]/20 hover:to-[#9F4CFF]/20 border border-[#4CC9F0]/30'
+                      : 'text-gray-700 hover:bg-[#002366]/5'
                     }
                   `}
                   onClick={onClose}
                 >
-                  <span className={isActive ? 'text-blue-600' : isHighlight ? 'text-green-600' : 'text-gray-400'}>
+                  <span className={isActive ? 'text-[#4CC9F0]' : isHighlight ? 'text-[#9F4CFF]' : 'text-gray-400'}>
                     {item.icon}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       {item.name}
                       {isHighlight && !isActive && (
-                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                        <span className="text-xs bg-gradient-to-r from-[#4CC9F0] to-[#9F4CFF] text-white px-1.5 py-0.5 rounded">
                           AI
                         </span>
                       )}
                     </div>
                     {subtitle && (
-                      <p className={`text-xs truncate ${isActive ? 'text-blue-500' : isHighlight ? 'text-green-600' : 'text-gray-400'}`}>
+                      <p className={`text-xs truncate ${isActive ? 'text-[#4CC9F0]' : isHighlight ? 'text-[#9F4CFF]' : 'text-gray-400'}`}>
                         {subtitle}
                       </p>
                     )}

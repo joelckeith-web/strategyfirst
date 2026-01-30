@@ -9,13 +9,13 @@ interface HeaderProps {
 
 export function Header({ onMenuToggle }: HeaderProps) {
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <header className="bg-[#002366] sticky top-0 z-40">
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
             <button
               type="button"
-              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
+              className="lg:hidden p-2 rounded-md text-white/70 hover:text-white hover:bg-white/10"
               onClick={onMenuToggle}
             >
               <span className="sr-only">Open menu</span>
@@ -36,21 +36,21 @@ export function Header({ onMenuToggle }: HeaderProps) {
 
             <Link href="/" className="flex items-center ml-4 lg:ml-0">
               <div className="flex-shrink-0">
-                <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">CA</span>
+                <div className="h-8 w-8 bg-gradient-to-br from-[#4CC9F0] to-[#9F4CFF] rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">SF</span>
                 </div>
               </div>
               <div className="ml-3">
-                <h1 className="text-lg font-semibold text-gray-900">{APP_NAME}</h1>
-                <p className="text-xs text-gray-500">{COMPANY_NAME}</p>
+                <h1 className="text-lg font-semibold text-white">{APP_NAME}</h1>
+                <p className="text-xs text-[#4CC9F0]">{COMPANY_NAME}</p>
               </div>
             </Link>
           </div>
 
           <div className="flex items-center gap-4">
             <Link
-              href="/analysis"
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              href="/research"
+              className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-[#4CC9F0] to-[#9F4CFF] text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
             >
               <svg
                 className="w-4 h-4 mr-2"
@@ -65,7 +65,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
                   d="M12 4.5v15m7.5-7.5h-15"
                 />
               </svg>
-              New Analysis
+              New Research
             </Link>
           </div>
         </div>

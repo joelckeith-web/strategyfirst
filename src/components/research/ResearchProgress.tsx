@@ -99,7 +99,7 @@ function TaskCard({
       case 'pending':
         return 'bg-gray-100 border-gray-200';
       case 'running':
-        return 'bg-[#4CC9F0]/10 border-[#4CC9F0]/40 animate-pulse';
+        return 'bg-[#002366]/10 border-[#002366]/40 animate-pulse';
       case 'completed':
         return 'bg-[#10B981]/10 border-[#10B981]/40';
       case 'failed':
@@ -115,7 +115,7 @@ function TaskCard({
         );
       case 'running':
         return (
-          <svg className="w-5 h-5 text-[#4CC9F0] animate-spin" fill="none" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-[#002366] animate-spin" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
@@ -266,11 +266,11 @@ export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProp
       <Card>
         <CardBody>
           <div className="flex items-center justify-center py-12">
-            <svg className="w-8 h-8 text-[#4CC9F0] animate-spin" fill="none" viewBox="0 0 24 24">
+            <svg className="w-8 h-8 text-[#002366] animate-spin" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <span className="ml-3 text-gray-600">Loading research status...</span>
+            <span className="ml-3 text-[#002366]">Loading research status...</span>
           </div>
         </CardBody>
       </Card>
@@ -307,7 +307,7 @@ export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProp
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-semibold text-[#002366]">
               {sessionStatus?.input?.businessName || 'Research in Progress'}
             </h2>
             <p className="text-sm text-gray-600 mt-1">

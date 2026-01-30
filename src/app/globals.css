@@ -42,13 +42,24 @@ body {
 .border-brand-primary { border-color: var(--color-primary); }
 .border-brand-secondary { border-color: var(--color-secondary); }
 
-/* Brand gradients */
+/* Brand gradients - navy dominant with accent highlights */
 .bg-gradient-brand {
   background: linear-gradient(135deg, #002366 0%, #4CC9F0 100%);
+}
+.bg-gradient-brand-dark {
+  background: linear-gradient(135deg, #001a4d 0%, #002366 50%, #4CC9F0 100%);
 }
 .bg-gradient-accent {
   background: linear-gradient(135deg, #4CC9F0 0%, #9F4CFF 100%);
 }
 .bg-gradient-cta {
   background: linear-gradient(90deg, #4CC9F0 0%, #9F4CFF 100%);
+}
+
+/* Gradient text utility */
+.text-gradient-accent {
+  background: linear-gradient(90deg, #4CC9F0 0%, #9F4CFF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }

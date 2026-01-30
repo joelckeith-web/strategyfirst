@@ -43,7 +43,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-[#002366]">Dashboard</h1>
           <p className="text-gray-500 mt-1">Monitor your competitor analyses</p>
         </div>
         <Link href="/analysis">
@@ -60,25 +60,25 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardBody className="text-center">
-            <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+            <p className="text-3xl font-bold text-[#002366]">{stats.total}</p>
             <p className="text-sm text-gray-500">Total Analyses</p>
           </CardBody>
         </Card>
         <Card>
           <CardBody className="text-center">
-            <p className="text-3xl font-bold text-green-600">{stats.completed}</p>
+            <p className="text-3xl font-bold text-[#10B981]">{stats.completed}</p>
             <p className="text-sm text-gray-500">Completed</p>
           </CardBody>
         </Card>
         <Card>
           <CardBody className="text-center">
-            <p className="text-3xl font-bold text-blue-600">{stats.processing}</p>
+            <p className="text-3xl font-bold text-[#4CC9F0]">{stats.processing}</p>
             <p className="text-sm text-gray-500">Processing</p>
           </CardBody>
         </Card>
         <Card>
           <CardBody className="text-center">
-            <p className="text-3xl font-bold text-yellow-600">{stats.pending}</p>
+            <p className="text-3xl font-bold text-[#F59E0B]">{stats.pending}</p>
             <p className="text-sm text-gray-500">Pending</p>
           </CardBody>
         </Card>
@@ -87,7 +87,7 @@ export default function DashboardPage() {
       {/* Recent Analyses */}
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-semibold text-gray-900">Recent Analyses</h2>
+          <h2 className="text-lg font-semibold text-[#002366]">Recent Analyses</h2>
         </CardHeader>
         <CardBody>
           {isLoading ? (
@@ -179,7 +179,7 @@ export default function DashboardPage() {
                       <td className="px-4 py-4 text-sm text-right">
                         <Link
                           href={`/analysis/${analysis.id}`}
-                          className="text-blue-600 hover:text-blue-700 font-medium"
+                          className="text-[#002366] hover:text-[#4CC9F0] font-medium"
                         >
                           View
                         </Link>
