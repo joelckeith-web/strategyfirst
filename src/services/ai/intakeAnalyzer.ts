@@ -119,6 +119,7 @@ function createDefaultWebsiteReadiness(input: AIAnalysisInput): WebsiteReadiness
     hasServicePages: createDefaultField(false, 'Unable to determine'),
     servicePageCount: createDefaultField(null, 'Unable to determine'),
     hasBlogSection: createDefaultField(false, 'Unable to determine'),
+    blogPostCount: createDefaultField(null, 'Unable to determine'),
     hasLocationPages: createDefaultField(false, 'Unable to determine'),
     locationPageCount: createDefaultField(null, 'Unable to determine'),
     hasHubPages: createDefaultField(false, 'Unable to determine'),

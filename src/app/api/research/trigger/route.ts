@@ -758,6 +758,9 @@ async function triggerFallbackResearch(
         };
         break;
       case 'website':
+        // Generate realistic mock pages for AI to analyze
+        const mockServiceName = input.industry?.replace(' ', '-').toLowerCase() || 'services';
+        const citySlug = input.city?.toLowerCase().replace(/\s+/g, '-') || 'local';
         stepData = {
           websiteCrawl: {
             cms: 'WordPress',
@@ -768,20 +771,60 @@ async function triggerFallbackResearch(
             schemaTypes: ['LocalBusiness', 'Organization'],
             description: `${input.businessName} - Quality services`,
             title: input.businessName,
-            pages: [],
+            totalPages: 18,
+            // Include realistic mock pages for AI categorization
+            pages: [
+              { url: `${input.website}/`, title: `${input.businessName} | ${input.industry || 'Service Provider'} in ${input.city || 'Your Area'}`, description: 'Homepage', estimatedWordCount: 1200 },
+              { url: `${input.website}/about`, title: `About ${input.businessName} | Our Story`, description: 'About our company', estimatedWordCount: 800 },
+              { url: `${input.website}/contact`, title: `Contact Us | ${input.businessName}`, description: 'Get in touch', estimatedWordCount: 300 },
+              { url: `${input.website}/services`, title: `Our Services | ${input.businessName}`, description: 'Services we offer', estimatedWordCount: 1500 },
+              { url: `${input.website}/services/${mockServiceName}`, title: `${input.industry || 'Professional Services'} | ${input.businessName}`, description: 'Main service page', estimatedWordCount: 1800 },
+              { url: `${input.website}/services/${mockServiceName}-repair`, title: `${input.industry || 'Service'} Repair | ${input.businessName}`, description: 'Repair services', estimatedWordCount: 1200 },
+              { url: `${input.website}/services/${mockServiceName}-installation`, title: `${input.industry || 'Service'} Installation | ${input.businessName}`, description: 'Installation services', estimatedWordCount: 1100 },
+              { url: `${input.website}/services/${mockServiceName}-maintenance`, title: `${input.industry || 'Service'} Maintenance | ${input.businessName}`, description: 'Maintenance services', estimatedWordCount: 900 },
+              { url: `${input.website}/areas/${citySlug}`, title: `${input.industry || 'Services'} in ${input.city || 'Local Area'} | ${input.businessName}`, description: 'Service area page', estimatedWordCount: 1400 },
+              { url: `${input.website}/blog`, title: `Blog | ${input.businessName}`, description: 'Latest news and tips', estimatedWordCount: 600 },
+              { url: `${input.website}/blog/tips-for-homeowners`, title: `Top 10 Tips for Homeowners | ${input.businessName}`, description: 'Blog article', estimatedWordCount: 1500 },
+              { url: `${input.website}/blog/how-to-choose-a-provider`, title: `How to Choose a ${input.industry || 'Service'} Provider | ${input.businessName}`, description: 'Blog article', estimatedWordCount: 2000 },
+              { url: `${input.website}/blog/common-problems`, title: `Common Problems and Solutions | ${input.businessName}`, description: 'Blog article', estimatedWordCount: 1800 },
+              { url: `${input.website}/faq`, title: `Frequently Asked Questions | ${input.businessName}`, description: 'FAQ page', estimatedWordCount: 2500 },
+              { url: `${input.website}/testimonials`, title: `Customer Reviews | ${input.businessName}`, description: 'Testimonials', estimatedWordCount: 1000 },
+              { url: `${input.website}/gallery`, title: `Our Work | ${input.businessName}`, description: 'Project gallery', estimatedWordCount: 400 },
+              { url: `${input.website}/team`, title: `Meet Our Team | ${input.businessName}`, description: 'Our staff', estimatedWordCount: 700 },
+              { url: `${input.website}/privacy-policy`, title: `Privacy Policy | ${input.businessName}`, description: 'Legal', estimatedWordCount: 1200 },
+            ],
             _mock: true,
           },
         };
         break;
       case 'sitemap':
+        // Generate matching sitemap URLs
+        const sitemapServiceName = input.industry?.replace(' ', '-').toLowerCase() || 'services';
+        const sitemapCitySlug = input.city?.toLowerCase().replace(/\s+/g, '-') || 'local';
         stepData = {
           sitemap: {
-            totalPages: 25,
-            pageTypes: { services: 5, blog: 10, about: 1, contact: 1, other: 8 },
-            hasServicePages: true,
-            hasBlog: true,
-            hasLocationPages: false,
-            recentlyUpdated: 5,
+            totalPages: 18,
+            // Raw URLs for AI to categorize (matches websiteCrawl pages)
+            urls: [
+              { url: `${input.website}/`, lastmod: null },
+              { url: `${input.website}/about`, lastmod: null },
+              { url: `${input.website}/contact`, lastmod: null },
+              { url: `${input.website}/services`, lastmod: null },
+              { url: `${input.website}/services/${sitemapServiceName}`, lastmod: null },
+              { url: `${input.website}/services/${sitemapServiceName}-repair`, lastmod: null },
+              { url: `${input.website}/services/${sitemapServiceName}-installation`, lastmod: null },
+              { url: `${input.website}/services/${sitemapServiceName}-maintenance`, lastmod: null },
+              { url: `${input.website}/areas/${sitemapCitySlug}`, lastmod: null },
+              { url: `${input.website}/blog`, lastmod: null },
+              { url: `${input.website}/blog/tips-for-homeowners`, lastmod: null },
+              { url: `${input.website}/blog/how-to-choose-a-provider`, lastmod: null },
+              { url: `${input.website}/blog/common-problems`, lastmod: null },
+              { url: `${input.website}/faq`, lastmod: null },
+              { url: `${input.website}/testimonials`, lastmod: null },
+              { url: `${input.website}/gallery`, lastmod: null },
+              { url: `${input.website}/team`, lastmod: null },
+              { url: `${input.website}/privacy-policy`, lastmod: null },
+            ],
             _mock: true,
           },
         };

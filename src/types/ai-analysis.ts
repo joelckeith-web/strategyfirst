@@ -97,6 +97,7 @@ export interface WebsiteReadinessFields {
   hasServicePages: InferredField<boolean>;
   servicePageCount: InferredField<number | null>;
   hasBlogSection: InferredField<boolean>;
+  blogPostCount: InferredField<number | null>;
   hasLocationPages: InferredField<boolean>;
   locationPageCount: InferredField<number | null>;
   hasHubPages: InferredField<boolean>;

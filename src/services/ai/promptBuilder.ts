@@ -800,6 +800,7 @@ const CATEGORY_FIELDS = {
     { name: 'hasServicePages', type: 'boolean', required: true },
     { name: 'servicePageCount', type: 'number|null', required: false },
     { name: 'hasBlogSection', type: 'boolean', required: true },
+    { name: 'blogPostCount', type: 'number|null', required: false },
     { name: 'hasLocationPages', type: 'boolean', required: false },
     { name: 'locationPageCount', type: 'number|null', required: false },
     { name: 'hasHubPages', type: 'boolean', required: false },
