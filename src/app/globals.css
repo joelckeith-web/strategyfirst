@@ -1,12 +1,54 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,700;0,900;1,700&display=swap');
 
 :root {
+  /* Brand Colors */
+  --color-primary: #002366;
+  --color-primary-dark: #001a4d;
+  --color-secondary: #4CC9F0;
+  --color-accent: #9F4CFF;
+  --color-black: #000000;
+  --color-white: #FFFFFF;
+
+  /* Semantic Colors */
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+  --color-info: #4CC9F0;
+
+  /* Backgrounds */
   --background: #f9fafb;
   --foreground: #111827;
+
+  /* Shadows with brand color */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 35, 102, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 35, 102, 0.1), 0 2px 4px -1px rgba(0, 35, 102, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 35, 102, 0.1), 0 4px 6px -2px rgba(0, 35, 102, 0.05);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Brand utility classes */
+.text-brand-primary { color: var(--color-primary); }
+.text-brand-secondary { color: var(--color-secondary); }
+.text-brand-accent { color: var(--color-accent); }
+.bg-brand-primary { background-color: var(--color-primary); }
+.bg-brand-secondary { background-color: var(--color-secondary); }
+.bg-brand-accent { background-color: var(--color-accent); }
+.border-brand-primary { border-color: var(--color-primary); }
+.border-brand-secondary { border-color: var(--color-secondary); }
+
+/* Brand gradients */
+.bg-gradient-brand {
+  background: linear-gradient(135deg, #002366 0%, #4CC9F0 100%);
+}
+.bg-gradient-accent {
+  background: linear-gradient(135deg, #4CC9F0 0%, #9F4CFF 100%);
+}
+.bg-gradient-cta {
+  background: linear-gradient(90deg, #4CC9F0 0%, #9F4CFF 100%);
 }

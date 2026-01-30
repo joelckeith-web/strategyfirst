@@ -83,14 +83,15 @@ Results stored in Supabase research_sessions table
 - Previously was incorrectly using last word of business name (e.g., "Services")
 - Filters out user's own business from competitor results
 
-### Task Display Order
+### Task Display Order (Research Progress UI)
 1. Google Business Profile (parallel with Sitemap)
 2. Sitemap Analysis (parallel with GBP)
 3. Competitor Research
 4. Website Crawl
 5. SEO Audit
 6. Citation Check
-7. AI Analysis (Claude API)
+
+Note: AI Analysis (Claude API) runs after data gathering completes but is not shown as a task card in the progress UI.
 
 ## Database Tables
 
@@ -114,7 +115,7 @@ Results stored in Supabase research_sessions table
 |------|---------|
 | `src/app/api/research/trigger/route.ts` | Starts research, runs 3-phase Apify execution |
 | `src/app/api/research/status/[sessionId]/route.ts` | Returns session status for polling |
-| `src/components/research/ResearchProgress.tsx` | Progress UI with 7 task cards |
+| `src/components/research/ResearchProgress.tsx` | Progress UI with 6 task cards (data gathering phase) |
 | `src/components/research/MinimalInputForm.tsx` | 4-field intake form |
 | `src/app/research/[id]/results/page.tsx` | Results display page |
 | `src/lib/apify/client.ts` | Apify API client with memory settings |
@@ -152,7 +153,7 @@ Results stored in Supabase research_sessions table
 
 - Fallback mock data runs when `APIFY_API_TOKEN` not configured
 - Uses `waitUntil()` from `@vercel/functions` for background processing
-- Results page handles 7 research types: gbp, competitors, website, sitemap, seo, citations, aiAnalysis
+- Results page handles research types: gbp, competitors, website, sitemap, seo, citations, aiAnalysis (AI analysis triggered separately after data gathering)
 - Supabase RLS disabled on research_sessions table for now
 
 ## Common Tasks

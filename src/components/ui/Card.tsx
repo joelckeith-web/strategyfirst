@@ -9,9 +9,9 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
     const baseStyles = 'rounded-lg bg-white';
 
     const variantStyles = {
-      default: 'shadow-sm border border-gray-200',
-      bordered: 'border-2 border-gray-300',
-      elevated: 'shadow-lg',
+      default: 'shadow-[0_4px_6px_-1px_rgba(0,35,102,0.1)] border border-gray-200',
+      bordered: 'border-2 border-[#002366]/20',
+      elevated: 'shadow-[0_10px_15px_-3px_rgba(0,35,102,0.1),0_4px_6px_-2px_rgba(0,35,102,0.05)]',
     };
 
     return (
