@@ -50,7 +50,8 @@ export function Header({ onMenuToggle }: HeaderProps) {
           <div className="flex items-center gap-4">
             <Link
               href="/research"
-              className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-[#4CC9F0] to-[#9F4CFF] text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
+              className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-[#4CC9F0] to-[#9F4CFF] text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity shadow-lg"
+              style={{ textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}
             >
               <svg
                 className="w-4 h-4 mr-2"
@@ -58,6 +59,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
                 viewBox="0 0 24 24"
                 strokeWidth="2"
                 stroke="currentColor"
+                style={{ filter: 'drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3))' }}
               >
                 <path
                   strokeLinecap="round"

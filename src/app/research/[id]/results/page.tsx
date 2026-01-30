@@ -45,11 +45,14 @@ interface WebsiteCrawlData {
 
 interface SitemapData {
   totalPages: number;
-  pageTypes: Record<string, number>;
-  hasServicePages: boolean;
-  hasBlog: boolean;
-  hasLocationPages: boolean;
-  recentlyUpdated: number;
+  pageTypes?: Record<string, number>;
+  hasServicePages?: boolean;
+  hasBlog?: boolean;
+  hasLocationPages?: boolean;
+  recentlyUpdated?: number;
+  // Raw URL data (when AI hasn't categorized yet)
+  urls?: Array<{ url: string; lastmod?: string | null }>;
+  derivedFromCrawler?: boolean;
 }
 
 interface SEOAuditData {
@@ -105,6 +108,18 @@ interface AIAnalysisData {
     input: number;
     output: number;
     total: number;
+  };
+  // Categories from AI analysis (includes page categorization)
+  categories?: {
+    websiteReadiness?: {
+      hasServicePages?: { value: boolean };
+      servicePageCount?: { value: number | null };
+      hasBlogSection?: { value: boolean };
+      blogPostCount?: { value: number | null };
+      hasLocationPages?: { value: boolean };
+      locationPageCount?: { value: number | null };
+      pageCount?: { value: number | null };
+    };
   };
   insights: {
     contentGaps: Array<{ gap: string; priority: string; action: string; category?: string; targetKeyword?: string; wordCountTarget?: number }>;
@@ -1285,41 +1300,66 @@ export default function ResearchResultsPage({
         )}
 
         {/* Sitemap Analysis */}
-        {sitemap && (
-          <Card>
-            <CardHeader>
-              <h2 className="text-xl font-semibold">Site Structure</h2>
-            </CardHeader>
-            <CardBody>
-              <div className="grid grid-cols-2 gap-4">
-                <StatCard value={sitemap.totalPages || 0} label="Total Pages" icon="📄" />
-                <StatCard value={sitemap.pageTypes?.services || 0} label="Service Pages" icon="🔧" />
-                <StatCard value={sitemap.pageTypes?.blog || 0} label="Blog Posts" icon="📝" />
-                <StatCard value={sitemap.recentlyUpdated || 0} label="Recently Updated" icon="🔄" />
-              </div>
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Has Service Pages</span>
-                  <span className={sitemap.hasServicePages ? 'text-green-500' : 'text-red-500'}>
-                    {sitemap.hasServicePages ? 'Yes' : 'No'}
-                  </span>
+        {sitemap && (() => {
+          // Use AI analysis data for page categorization when available
+          const aiWebsite = aiAnalysis?.categories?.websiteReadiness;
+          const hasServicePages = aiWebsite?.hasServicePages?.value ?? sitemap.hasServicePages ?? false;
+          const servicePageCount = aiWebsite?.servicePageCount?.value ?? sitemap.pageTypes?.services ?? 0;
+          const hasBlog = aiWebsite?.hasBlogSection?.value ?? sitemap.hasBlog ?? false;
+          const blogPostCount = aiWebsite?.blogPostCount?.value ?? sitemap.pageTypes?.blog ?? 0;
+          const hasLocationPages = aiWebsite?.hasLocationPages?.value ?? sitemap.hasLocationPages ?? false;
+          const locationPageCount = aiWebsite?.locationPageCount?.value ?? sitemap.pageTypes?.locations ?? 0;
+          const totalPages = aiWebsite?.pageCount?.value ?? sitemap.totalPages ?? 0;
+          const isAiCategorized = !!aiWebsite;
+
+          return (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Site Structure</h2>
+                  {!isAiCategorized && sitemap.urls && sitemap.urls.length > 0 && (
+                    <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                      Run AI Analysis for detailed categorization
+                    </span>
+                  )}
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Has Blog</span>
-                  <span className={sitemap.hasBlog ? 'text-green-500' : 'text-amber-500'}>
-                    {sitemap.hasBlog ? 'Yes' : 'No'}
-                  </span>
+              </CardHeader>
+              <CardBody>
+                <div className="grid grid-cols-2 gap-4">
+                  <StatCard value={totalPages} label="Total Pages" icon="📄" />
+                  <StatCard value={servicePageCount || 0} label="Service Pages" icon="🔧" />
+                  <StatCard value={blogPostCount || 0} label="Blog Posts" icon="📝" />
+                  <StatCard value={locationPageCount || 0} label="Location Pages" icon="📍" />
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Has Location Pages</span>
-                  <span className={sitemap.hasLocationPages ? 'text-green-500' : 'text-gray-400'}>
-                    {sitemap.hasLocationPages ? 'Yes' : 'No'}
-                  </span>
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Has Service Pages</span>
+                    <span className={hasServicePages ? 'text-green-500' : 'text-red-500'}>
+                      {hasServicePages ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Has Blog</span>
+                    <span className={hasBlog ? 'text-green-500' : 'text-amber-500'}>
+                      {hasBlog ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Has Location Pages</span>
+                    <span className={hasLocationPages ? 'text-green-500' : 'text-gray-400'}>
+                      {hasLocationPages ? 'Yes' : 'No'}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </CardBody>
-          </Card>
-        )}
+                {isAiCategorized && (
+                  <p className="text-xs text-gray-400 mt-3 text-center">
+                    Page types categorized by AI analysis
+                  </p>
+                )}
+              </CardBody>
+            </Card>
+          );
+        })()}
       </div>
 
       {/* Citations */}

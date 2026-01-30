@@ -66,13 +66,13 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       {/* Sidebar */}
       <aside
         className={`
-          fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200
-          transform transition-transform duration-200 ease-in-out
+          fixed lg:relative inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200
+          transform transition-transform duration-200 ease-in-out lg:h-full
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}
       >
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col overflow-y-auto">
           {/* Mobile close button */}
           <div className="lg:hidden flex items-center justify-end p-4">
             <button
