@@ -24,8 +24,8 @@ export interface CrawlWebsiteOutput {
  * Crawl a website and extract content
  *
  * Performance options:
- * - lightweight: true = 15 pages, depth 2, cheerio - ~30-60s
- * - lightweight: false = 30 pages, depth 3, cheerio - ~1-3min
+ * - lightweight: true = 25 pages, depth 3, cheerio - ~1-2min
+ * - lightweight: false = 150 pages, depth 5, cheerio - ~3-8min
  *
  * Using cheerio (HTTP-based) for all crawls - 10-50x faster than Playwright.
  * Playwright only needed for heavy JS-rendered SPAs (rare for local businesses).
@@ -38,19 +38,19 @@ export async function crawlWebsite(
 
   // Lightweight mode for faster initial analysis
   const isLightweight = options.lightweight ?? false;
-  // Reduced max pages to prevent timeouts on larger sites
-  const maxPages = options.maxPages || (isLightweight ? 15 : 30);
-  const maxDepth = options.maxDepth || (isLightweight ? 2 : 3);
+  // Full mode crawls up to 150 pages for comprehensive site analysis
+  const maxPages = options.maxPages || (isLightweight ? 25 : 150);
+  const maxDepth = options.maxDepth || (isLightweight ? 3 : 5);
 
   // Use cheerio for ALL crawls - HTTP-based, extremely fast
   // Only switch to playwright if site requires JS rendering (rare)
   const crawlerType = 'cheerio';
 
-  // Memory: 4GB for cheerio (lightweight on resources)
-  const memory = 4096;
+  // Memory: 16GB for comprehensive crawling
+  const memory = 16384;
 
-  // Timeout: 2 min for lightweight, 8 min for full (allow more time for larger sites)
-  const timeout = isLightweight ? 120 : 480;
+  // Timeout: 3 min for lightweight, 15 min for full (allow time for larger sites)
+  const timeout = isLightweight ? 180 : 900;
 
   // Build start URLs - include homepage plus important sitemap URLs
   const startUrls: { url: string }[] = [{ url }];
@@ -73,8 +73,8 @@ export async function crawlWebsite(
       }
     }
 
-    // Add priority URLs first (up to 15), then fill with others
-    const urlsToAdd = [...priorityUrls.slice(0, 15), ...otherUrls.slice(0, 10)];
+    // Add priority URLs first (up to 50), then fill with others (up to 50)
+    const urlsToAdd = [...priorityUrls.slice(0, 50), ...otherUrls.slice(0, 50)];
     for (const sitemapUrl of urlsToAdd) {
       if (!startUrls.some(s => s.url === sitemapUrl)) {
         startUrls.push({ url: sitemapUrl });
@@ -98,9 +98,9 @@ export async function crawlWebsite(
     saveScreenshots: false,
     // Request settings - allow more time per page for reliability
     requestHandlerTimeoutSecs: 60,
-    // Concurrency - moderate to avoid overwhelming target servers
-    maxConcurrency: 10,
-    minConcurrency: 3,
+    // Concurrency - higher with 16GB RAM available
+    maxConcurrency: 20,
+    minConcurrency: 5,
   };
 
   if (options.includePatterns) {
