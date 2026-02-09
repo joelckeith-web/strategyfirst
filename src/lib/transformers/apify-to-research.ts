@@ -99,7 +99,7 @@ export function transformWebsiteCrawlerToWebsiteData(
       url: page.url,
       title: page.title || '',
       wordCount: (page.text || '').split(/\s+/).filter(Boolean).length,
-      contentPreview: (page.text || '').slice(0, 3000),
+      contentPreview: (page.text || '').slice(0, 1500),
       pageType: categorizeUrl(page.url),
     })),
   };

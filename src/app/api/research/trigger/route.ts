@@ -876,7 +876,7 @@ async function triggerApifyResearch(
             description: p.metadata?.description || '',
             estimatedWordCount: p.text ? Math.round(p.text.length / 5) : 0,
             pageType: categorizePageByTitleAndUrl(pageUrl, pageTitle),
-            contentPreview: p.text ? p.text.slice(0, 3000) : '',
+            contentPreview: p.text ? p.text.slice(0, 1500) : '',
             headings: hasHtml ? extractHeadings(p.html!) : { h1: [], h2: [] },
             internalLinkCount: hasHtml ? countLinks(p.html!, pageDomain).internal : 0,
             externalLinkCount: hasHtml ? countLinks(p.html!, pageDomain).external : 0,
