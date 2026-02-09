@@ -5,8 +5,9 @@ import { isClaudeConfigured } from '@/lib/ai/config';
 import type { AIAnalysisInput } from '@/types/ai-analysis';
 import type { ResearchSession, Json } from '@/lib/supabase/types';
 
-// Extend Vercel function timeout for AI analysis (Claude API can take 60-120s)
-export const maxDuration = 180; // 3 minutes
+// Extend Vercel function timeout for AI analysis
+// Large prompts (150 pages * 3000 char previews) can take 2-4 minutes for Claude to process
+export const maxDuration = 300; // 5 minutes
 
 /**
  * POST /api/research/[id]/analyze
