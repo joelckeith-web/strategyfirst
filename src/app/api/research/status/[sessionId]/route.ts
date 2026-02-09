@@ -36,6 +36,8 @@ export async function GET(
     // Type the session data
     const session = sessionData as {
       id: string;
+      client_id: string | null;
+      location_id: string | null;
       status: string;
       progress: unknown;
       results: unknown;
@@ -49,6 +51,8 @@ export async function GET(
     // Return session status and progress
     return NextResponse.json({
       sessionId: session.id,
+      clientId: session.client_id,
+      locationId: session.location_id,
       status: session.status,
       progress: session.progress,
       results: session.results,

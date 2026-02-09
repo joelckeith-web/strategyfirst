@@ -1,10 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
+import { API_ENDPOINTS } from '@/lib/constants';
+
+interface LocationOption {
+  id: string;
+  label: string;
+  city: string;
+  state: string;
+  service_area: string | null;
+  gbp_url: string | null;
+}
+
+interface ClientOption {
+  id: string;
+  business_name: string;
+  website_url: string;
+  locations?: LocationOption[];
+}
 
 interface FormData {
   businessName: string;
@@ -19,7 +36,12 @@ interface FormErrors {
   primaryServiceArea?: string;
 }
 
-export function MinimalInputForm() {
+interface MinimalInputFormProps {
+  initialClientId?: string;
+  initialLocationId?: string;
+}
+
+export function MinimalInputForm({ initialClientId, initialLocationId }: MinimalInputFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -29,6 +51,115 @@ export function MinimalInputForm() {
     gbpUrl: '',
     primaryServiceArea: '',
   });
+
+  // Client/location selector state
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientResults, setClientResults] = useState<ClientOption[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<LocationOption | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Load initial client/location if provided via query params
+  useEffect(() => {
+    if (initialClientId) {
+      fetch(API_ENDPOINTS.clientById(initialClientId))
+        .then(r => r.json())
+        .then(data => {
+          if (data.client) {
+            const client = data.client as ClientOption;
+            setSelectedClient(client);
+            setClientSearch(client.business_name);
+            setFormData(prev => ({
+              ...prev,
+              businessName: client.business_name,
+              websiteUrl: client.website_url,
+            }));
+
+            // Also set location if provided
+            if (initialLocationId && client.locations) {
+              const loc = client.locations.find(l => l.id === initialLocationId);
+              if (loc) {
+                setSelectedLocation(loc);
+                setFormData(prev => ({
+                  ...prev,
+                  primaryServiceArea: loc.service_area || `${loc.city}, ${loc.state}`,
+                  gbpUrl: loc.gbp_url || prev.gbpUrl,
+                }));
+              }
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [initialClientId, initialLocationId]);
+
+  // Debounced client search
+  const searchClients = useCallback(async (term: string) => {
+    if (!term || term.length < 2) {
+      setClientResults([]);
+      return;
+    }
+    setIsSearching(true);
+    try {
+      const response = await fetch(`${API_ENDPOINTS.clients}?search=${encodeURIComponent(term)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setClientResults(data.clients || []);
+      }
+    } catch {
+      // ignore search errors
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedClient) return; // Don't search while a client is selected
+    const timer = setTimeout(() => searchClients(clientSearch), 300);
+    return () => clearTimeout(timer);
+  }, [clientSearch, selectedClient, searchClients]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const handleSelectClient = (client: ClientOption) => {
+    setSelectedClient(client);
+    setClientSearch(client.business_name);
+    setShowDropdown(false);
+    setFormData(prev => ({
+      ...prev,
+      businessName: client.business_name,
+      websiteUrl: client.website_url,
+    }));
+    // Reset location selection
+    setSelectedLocation(null);
+  };
+
+  const handleSelectLocation = (location: LocationOption) => {
+    setSelectedLocation(location);
+    setFormData(prev => ({
+      ...prev,
+      primaryServiceArea: location.service_area || `${location.city}, ${location.state}`,
+      gbpUrl: location.gbp_url || prev.gbpUrl,
+    }));
+  };
+
+  const handleClearClient = () => {
+    setSelectedClient(null);
+    setSelectedLocation(null);
+    setClientSearch('');
+    setFormData({ businessName: '', websiteUrl: '', gbpUrl: '', primaryServiceArea: '' });
+  };
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -78,6 +209,8 @@ export function MinimalInputForm() {
           city,
           state,
           location: formData.primaryServiceArea,
+          clientId: selectedClient?.id || undefined,
+          locationId: selectedLocation?.id || undefined,
         }),
       });
 
@@ -115,6 +248,87 @@ export function MinimalInputForm() {
       </CardHeader>
       <CardBody>
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Client/Location Selector */}
+          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Existing Client (optional)
+            </p>
+            <div className="relative" ref={dropdownRef}>
+              {selectedClient ? (
+                <div className="flex items-center justify-between px-3 py-2 bg-white border border-gray-300 rounded-lg">
+                  <div>
+                    <span className="font-medium text-sm text-gray-900">{selectedClient.business_name}</span>
+                    <span className="text-xs text-gray-500 ml-2">{selectedClient.website_url}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearClient}
+                    className="text-gray-400 hover:text-gray-600 ml-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={clientSearch}
+                  onChange={(e) => {
+                    setClientSearch(e.target.value);
+                    setShowDropdown(true);
+                  }}
+                  onFocus={() => clientSearch.length >= 2 && setShowDropdown(true)}
+                  placeholder="Search for existing client..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#002366]/20 focus:border-[#002366]"
+                />
+              )}
+              {showDropdown && clientResults.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {clientResults.map((client) => (
+                    <button
+                      key={client.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b border-gray-100 last:border-0"
+                      onClick={() => handleSelectClient(client)}
+                    >
+                      <span className="font-medium">{client.business_name}</span>
+                      <span className="text-gray-400 ml-2 text-xs">{client.website_url}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {showDropdown && isSearching && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm text-gray-500">
+                  Searching...
+                </div>
+              )}
+            </div>
+
+            {/* Location selector (shown when client is selected and has locations) */}
+            {selectedClient && selectedClient.locations && selectedClient.locations.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Location</label>
+                <select
+                  value={selectedLocation?.id || ''}
+                  onChange={(e) => {
+                    const loc = selectedClient.locations?.find(l => l.id === e.target.value);
+                    if (loc) handleSelectLocation(loc);
+                    else setSelectedLocation(null);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#002366]/20 focus:border-[#002366] bg-white"
+                >
+                  <option value="">Select a location...</option>
+                  {selectedClient.locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.label} ({loc.city}, {loc.state})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
           <div>
             <label htmlFor="businessName" className="block text-sm font-medium text-gray-700 mb-1">
               Business Name <span className="text-red-500">*</span>

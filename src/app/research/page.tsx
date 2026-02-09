@@ -1,8 +1,13 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { MinimalInputForm } from '@/components/research';
 
 export default function ResearchPage() {
+  const searchParams = useSearchParams();
+  const clientId = searchParams.get('clientId') || undefined;
+  const locationId = searchParams.get('locationId') || undefined;
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
@@ -12,7 +17,10 @@ export default function ResearchPage() {
         </p>
       </div>
 
-      <MinimalInputForm />
+      <MinimalInputForm
+        initialClientId={clientId}
+        initialLocationId={locationId}
+      />
     </div>
   );
 }

@@ -16,6 +16,10 @@ export type Database = {
           website_url: string;
           gbp_url: string | null;
           primary_service_area: string;
+          phone: string | null;
+          industry: string | null;
+          notes: string | null;
+          metadata: Json | null;
           status: string;
           created_at: string;
           updated_at: string;
@@ -26,6 +30,10 @@ export type Database = {
           website_url: string;
           gbp_url?: string | null;
           primary_service_area: string;
+          phone?: string | null;
+          industry?: string | null;
+          notes?: string | null;
+          metadata?: Json | null;
           status?: string;
           created_at?: string;
           updated_at?: string;
@@ -36,7 +44,61 @@ export type Database = {
           website_url?: string;
           gbp_url?: string | null;
           primary_service_area?: string;
+          phone?: string | null;
+          industry?: string | null;
+          notes?: string | null;
+          metadata?: Json | null;
           status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      locations: {
+        Row: {
+          id: string;
+          client_id: string;
+          label: string;
+          city: string;
+          state: string;
+          service_area: string | null;
+          gbp_url: string | null;
+          address: string | null;
+          zip: string | null;
+          phone: string | null;
+          is_primary: boolean;
+          metadata: Json | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          label: string;
+          city: string;
+          state: string;
+          service_area?: string | null;
+          gbp_url?: string | null;
+          address?: string | null;
+          zip?: string | null;
+          phone?: string | null;
+          is_primary?: boolean;
+          metadata?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          client_id?: string;
+          label?: string;
+          city?: string;
+          state?: string;
+          service_area?: string | null;
+          gbp_url?: string | null;
+          address?: string | null;
+          zip?: string | null;
+          phone?: string | null;
+          is_primary?: boolean;
+          metadata?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -181,6 +243,7 @@ export type Database = {
         Row: {
           id: string;
           client_id: string | null;
+          location_id: string | null;
           input: Json;
           status: string;
           progress: Json;
@@ -195,6 +258,7 @@ export type Database = {
         Insert: {
           id?: string;
           client_id?: string | null;
+          location_id?: string | null;
           input: Json;
           status?: string;
           progress?: Json;
@@ -209,6 +273,7 @@ export type Database = {
         Update: {
           id?: string;
           client_id?: string | null;
+          location_id?: string | null;
           input?: Json;
           status?: string;
           progress?: Json;
@@ -233,6 +298,10 @@ export type Client = Database['public']['Tables']['clients']['Row'];
 export type ClientInsert = Database['public']['Tables']['clients']['Insert'];
 export type ClientUpdate = Database['public']['Tables']['clients']['Update'];
 
+export type Location = Database['public']['Tables']['locations']['Row'];
+export type LocationInsert = Database['public']['Tables']['locations']['Insert'];
+export type LocationUpdate = Database['public']['Tables']['locations']['Update'];
+
 export type ResearchResults = Database['public']['Tables']['research_results']['Row'];
 export type ResearchResultsInsert = Database['public']['Tables']['research_results']['Insert'];
 export type ResearchResultsUpdate = Database['public']['Tables']['research_results']['Update'];
@@ -251,4 +320,9 @@ export type ResearchStatus = 'pending' | 'running' | 'completed' | 'failed' | 'p
 // Combined client with research results
 export interface ClientWithResearch extends Client {
   research_results?: ResearchResults;
+}
+
+// Client with locations included
+export interface ClientWithLocations extends Client {
+  locations?: Location[];
 }

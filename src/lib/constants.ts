@@ -48,4 +48,10 @@ export const SCORE_THRESHOLDS = {
 export const API_ENDPOINTS = {
   analysis: '/api/analysis',
   analysisById: (id: string) => `/api/analysis/${id}`,
+  clients: '/api/clients',
+  clientById: (id: string) => `/api/clients/${id}`,
+  clientLocations: (clientId: string) => `/api/clients/${clientId}/locations`,
+  clientLocation: (clientId: string, locationId: string) =>
+    `/api/clients/${clientId}/locations/${locationId}`,
+  clientSessions: (clientId: string) => `/api/clients/${clientId}/sessions`,
 } as const;

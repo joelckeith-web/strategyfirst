@@ -11,7 +11,7 @@ import {
 } from '@/services/apify/googlePlaces';
 import { crawlWebsite } from '@/services/apify/websiteCrawler';
 import { extractSitemap, analyzeSitemapStructure } from '@/services/apify/sitemapExtractor';
-import { checkCitations, transformCitationResults } from '@/services/apify/citationChecker';
+// Citation check is now triggered via button - see /api/research/[id]/citations
 
 /**
  * Input from the client request
@@ -27,6 +27,122 @@ interface TriggerRequestInput {
   gbpUrl?: string;
   industry?: string;
   primaryServices?: string[];
+  clientId?: string;
+  locationId?: string;
+}
+
+/**
+ * Normalize a URL for comparison: lowercase, strip trailing slash and protocol
+ */
+function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url.toLowerCase());
+    return parsed.host + parsed.pathname.replace(/\/$/, '');
+  } catch {
+    return url.toLowerCase().replace(/\/$/, '');
+  }
+}
+
+/**
+ * Auto-resolve client: find existing by business_name + website_url, or create new
+ */
+async function resolveClient(
+  businessName: string,
+  websiteUrl: string,
+  serviceArea: string,
+  gbpUrl?: string,
+  industry?: string
+): Promise<string> {
+  // Try to find existing client by business_name (case-insensitive) and website_url (normalized)
+  const { data: existingClients } = await supabaseAdmin
+    .from('clients')
+    .select('id, website_url')
+    .ilike('business_name', businessName);
+
+  if (existingClients && existingClients.length > 0) {
+    const normalizedInput = normalizeUrl(websiteUrl);
+    const match = existingClients.find(
+      (c) => normalizeUrl((c as { website_url: string }).website_url) === normalizedInput
+    );
+    if (match) return (match as { id: string }).id;
+  }
+
+  // Create new client
+  const { data: newClient, error } = await supabaseAdmin
+    .from('clients')
+    .insert({
+      business_name: businessName,
+      website_url: websiteUrl,
+      primary_service_area: serviceArea,
+      gbp_url: gbpUrl || null,
+      industry: industry || null,
+      status: 'active',
+    } as never)
+    .select('id')
+    .single();
+
+  if (error || !newClient) {
+    throw new Error('Failed to create client record');
+  }
+
+  return (newClient as { id: string }).id;
+}
+
+/**
+ * Auto-resolve location: find existing under client by city + state, or create new
+ */
+async function resolveLocation(
+  clientId: string,
+  city: string,
+  state: string,
+  gbpUrl?: string
+): Promise<string> {
+  // Try to find existing location under this client with matching city + state
+  const { data: existingLocations } = await supabaseAdmin
+    .from('locations')
+    .select('id')
+    .eq('client_id', clientId)
+    .ilike('city', city)
+    .ilike('state', state);
+
+  if (existingLocations && existingLocations.length > 0) {
+    return (existingLocations[0] as { id: string }).id;
+  }
+
+  // Create new location
+  const label = `${city}, ${state}`;
+  const { data: newLocation, error } = await supabaseAdmin
+    .from('locations')
+    .insert({
+      client_id: clientId,
+      label,
+      city,
+      state,
+      service_area: label,
+      gbp_url: gbpUrl || null,
+      is_primary: false,
+    } as never)
+    .select('id')
+    .single();
+
+  if (error || !newLocation) {
+    throw new Error('Failed to create location record');
+  }
+
+  // Check if this is the first location — make it primary
+  const { count } = await supabaseAdmin
+    .from('locations')
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', clientId);
+
+  if (count === 1) {
+    await supabaseAdmin
+      .from('locations')
+      .update({ is_primary: true } as never)
+      .eq('id', (newLocation as { id: string }).id);
+  }
+
+  return (newLocation as { id: string }).id;
 }
 
 /**
@@ -91,8 +207,31 @@ export async function POST(request: NextRequest) {
       gbpUrl: body.gbpUrl,
     };
 
+    // Resolve client and location
+    let clientId = body.clientId || null;
+    let locationId = body.locationId || null;
+
+    try {
+      const serviceArea = [city, state].filter(Boolean).join(', ') || 'United States';
+
+      // Auto-resolve client if not provided
+      if (!clientId) {
+        clientId = await resolveClient(businessName, website, serviceArea, body.gbpUrl, body.industry);
+      }
+
+      // Auto-resolve location if not provided and we have city/state
+      if (!locationId && clientId && city) {
+        locationId = await resolveLocation(clientId, city, state || '', body.gbpUrl);
+      }
+    } catch (err) {
+      // Non-fatal: log but continue — session still works without client/location link
+      console.error('Failed to resolve client/location:', err);
+    }
+
     // Create research session in Supabase
     const sessionInsert: ResearchSessionInsert = {
+      client_id: clientId,
+      location_id: locationId,
       input: inputData as unknown as Json,
       status: 'pending',
       progress: {
@@ -591,133 +730,11 @@ async function triggerApifyResearch(
   };
   completedSteps.push('seo');
 
-  // ============================================================
-  // PHASE 4: Citation Check (uses real Citation Checker AI actor)
-  // ============================================================
-  console.log('Phase 4: Running citation check...');
-
-  await supabaseAdmin
-    .from('research_sessions')
-    .update({
-      results: accumulatedResults,
-      progress: {
-        currentStep: 'citations',
-        completedSteps,
-        failedSteps,
-        percentage: 85,
-        phase: 'Phase 4: Checking business citations across 36+ directories',
-      },
-    } as never)
-    .eq('id', sessionId);
-
-  // Get GBP data for citation check input
-  const gbpForCitations = accumulatedResults.gbp as {
-    name?: string;
-    phone?: string;
-    address?: string;
-    url?: string; // Google Maps URL for the business
-  } | undefined;
-
-  // Log what data we're sending to citation checker
-  console.log('GBP data available for citations:', {
-    name: gbpForCitations?.name,
-    phone: gbpForCitations?.phone,
-    address: gbpForCitations?.address,
-    url: gbpForCitations?.url,
-  });
-
-  // Use the business name from GBP if available (more accurate), otherwise use input
-  const citationBusinessName = gbpForCitations?.name || input.businessName;
-
-  // Parse GBP address into components if available
-  // GBP address format is typically: "123 Main St, City, State ZIP"
-  let streetAddress = '';
-  let citationCity = input.city;
-  let citationState = input.state;
-
-  if (gbpForCitations?.address) {
-    const addressParts = gbpForCitations.address.split(',').map(p => p.trim());
-    if (addressParts.length >= 1) streetAddress = addressParts[0]; // Street
-    if (addressParts.length >= 2) citationCity = addressParts[1]; // City
-    if (addressParts.length >= 3) {
-      // State might include ZIP: "CA 90210"
-      const stateZip = addressParts[2].trim().split(' ');
-      citationState = stateZip[0];
-    }
-  }
-
-  // Build providedUrls map if we have the GBP URL
-  const providedUrls: Record<string, string> = {};
-  if (gbpForCitations?.url) {
-    providedUrls['Google Business'] = gbpForCitations.url;
-  }
-
-  console.log('Citation check input data:', {
-    businessName: citationBusinessName,
-    streetAddress,
-    city: citationCity,
-    state: citationState,
-    phone: gbpForCitations?.phone,
-    website: input.website,
-    providedUrls,
-  });
-
-  try {
-    const citationResult = await checkCitations({
-      businessName: citationBusinessName,
-      streetAddress,
-      city: citationCity,
-      state: citationState,
-      phone: gbpForCitations?.phone,
-      website: input.website,
-      // Pass known URLs to help actor find listings faster
-      preknownUrls: Object.keys(providedUrls).length > 0 ? providedUrls : undefined,
-    });
-
-    if (citationResult.success) {
-      // Use real citation data - even if 0 found, that's valid data
-      accumulatedResults.citations = transformCitationResults(citationResult);
-      accumulatedResults.citationSummary = {
-        totalChecked: citationResult.totalDirectoriesChecked,
-        found: citationResult.directoriesFound,
-        withIssues: citationResult.directoriesWithIssues,
-        napConsistencyScore: citationResult.napConsistencyScore,
-        commonIssues: citationResult.commonIssues,
-        recommendations: citationResult.recommendations,
-      };
-      completedSteps.push('citations');
-      console.log(`Citation check completed: ${citationResult.directoriesFound}/${citationResult.totalDirectoriesChecked} found, ${citationResult.napConsistencyScore}% consistent`);
-    } else {
-      // Only use placeholder if the actor actually failed
-      console.log('Citation check failed:', citationResult.error);
-      accumulatedResults.citations = [];
-      accumulatedResults.citationSummary = {
-        totalChecked: 0,
-        found: 0,
-        withIssues: 0,
-        napConsistencyScore: 0,
-        error: citationResult.error || 'Citation check failed',
-      };
-      failedSteps.push('citations');
-      errors.push({ step: 'citations', code: 'FAILED', message: citationResult.error || 'Citation check failed' });
-    }
-  } catch (citationError) {
-    // Actor threw an exception
-    console.error('Citation check error:', citationError);
-    accumulatedResults.citations = [];
-    accumulatedResults.citationSummary = {
-      totalChecked: 0,
-      found: 0,
-      withIssues: 0,
-      napConsistencyScore: 0,
-      error: citationError instanceof Error ? citationError.message : 'Unknown error',
-    };
-    failedSteps.push('citations');
-    errors.push({ step: 'citations', code: 'ERROR', message: citationError instanceof Error ? citationError.message : 'Unknown error' });
-  }
+  // Note: Citation check is now triggered separately via button on results page
+  // See /api/research/[id]/citations endpoint
 
   // Final update
-  const allSteps = ['gbp', 'competitors', 'website', 'sitemap', 'seo', 'citations'];
+  const allSteps = ['gbp', 'competitors', 'website', 'sitemap', 'seo'];
   const finalStatus = failedSteps.length === 4 ? 'failed' : 'completed'; // 4 = all Apify tasks failed
 
   await supabaseAdmin

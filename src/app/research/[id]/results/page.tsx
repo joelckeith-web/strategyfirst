@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
@@ -92,7 +93,20 @@ interface SEOAuditData {
 interface CitationData {
   source: string;
   found: boolean;
-  napConsistent?: boolean;
+  napConsistent?: boolean | null;
+  url?: string;
+  issues?: string[];
+}
+
+interface CitationSummary {
+  totalChecked: number;
+  found: number;
+  withIssues: number;
+  napConsistencyScore: number;
+  commonIssues?: string[];
+  recommendations?: string[];
+  checkedAt?: string;
+  error?: string;
 }
 
 interface AIAnalysisData {
@@ -277,11 +291,14 @@ interface ResearchResults {
   sitemap?: SitemapData;
   seoAudit?: SEOAuditData;
   citations?: CitationData[];
+  citationSummary?: CitationSummary;
   aiAnalysis?: AIAnalysisData;
 }
 
 interface SessionData {
   sessionId: string;
+  clientId?: string | null;
+  locationId?: string | null;
   status: string;
   input: {
     businessName: string;
@@ -340,6 +357,8 @@ export default function ResearchResultsPage({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [hasTriggeredReanalysis, setHasTriggeredReanalysis] = useState(false);
+  const [isCitationLoading, setIsCitationLoading] = useState(false);
+  const [citationError, setCitationError] = useState<string | null>(null);
 
   const runAIAnalysis = useCallback(async () => {
     setIsAnalyzing(true);
@@ -373,6 +392,40 @@ export default function ResearchResultsPage({
       setIsAnalyzing(false);
     }
   }, [sessionId, searchParams, router]);
+
+  const runCitationCheck = useCallback(async () => {
+    setIsCitationLoading(true);
+    setCitationError(null);
+
+    try {
+      const response = await fetch(`/api/research/${sessionId}/citations`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to run citation check');
+      }
+
+      // Update session data with new citations
+      if (data.success && sessionData) {
+        const updatedData = {
+          ...sessionData,
+          results: {
+            ...sessionData.results,
+            citations: data.data.citations,
+            citationSummary: data.data.summary,
+          },
+        };
+        setSessionData(updatedData);
+      }
+    } catch (err) {
+      setCitationError(err instanceof Error ? err.message : 'Failed to run citation check');
+    } finally {
+      setIsCitationLoading(false);
+    }
+  }, [sessionId, sessionData]);
 
   useEffect(() => {
     async function fetchResults() {
@@ -434,7 +487,7 @@ export default function ResearchResultsPage({
   }
 
   const { results, input } = sessionData;
-  const { gbp, competitors, mapPack, websiteCrawl, sitemap, seoAudit, citations, aiAnalysis: rawAiAnalysis } = results;
+  const { gbp, competitors, mapPack, websiteCrawl, sitemap, seoAudit, citations, citationSummary, aiAnalysis: rawAiAnalysis } = results;
 
   // Normalize aiAnalysis - treat empty objects as undefined
   const aiAnalysis = rawAiAnalysis && typeof rawAiAnalysis === 'object' && Object.keys(rawAiAnalysis).length > 0
@@ -451,10 +504,28 @@ export default function ResearchResultsPage({
           {input.city && input.state && (
             <p className="text-sm text-gray-500">{input.city}, {input.state}</p>
           )}
+          {sessionData.clientId && (
+            <Link
+              href={`/clients/${sessionData.clientId}`}
+              className="text-sm text-blue-600 hover:underline mt-1 inline-block"
+            >
+              View Client Profile &rarr;
+            </Link>
+          )}
         </div>
-        <Button onClick={() => router.push('/research')} variant="outline">
-          New Research
-        </Button>
+        <div className="flex gap-2">
+          {sessionData.clientId && sessionData.locationId && (
+            <Button
+              onClick={() => router.push(`/research?clientId=${sessionData.clientId}&locationId=${sessionData.locationId}`)}
+              variant="outline"
+            >
+              Run Again
+            </Button>
+          )}
+          <Button onClick={() => router.push('/research')} variant="outline">
+            New Research
+          </Button>
+        </div>
       </div>
 
       {/* AI Analysis Section */}
@@ -1363,43 +1434,129 @@ export default function ResearchResultsPage({
       </div>
 
       {/* Citations */}
-      {citations && citations.length > 0 && (
-        <Card>
-          <CardHeader>
-            <h2 className="text-xl font-semibold">Citation Check</h2>
-            <p className="text-sm text-gray-500 mt-1">Business directory listings and NAP consistency</p>
-          </CardHeader>
-          <CardBody>
-            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {citations.map((citation, idx) => (
-                <div
-                  key={idx}
-                  className={`p-4 rounded-lg border ${
-                    citation.found
-                      ? citation.napConsistent
-                        ? 'bg-green-50 border-green-200'
-                        : 'bg-amber-50 border-amber-200'
-                      : 'bg-gray-50 border-gray-200'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{citation.source}</span>
-                    {citation.found ? (
-                      citation.napConsistent ? (
-                        <span className="text-green-600 text-sm">Consistent</span>
-                      ) : (
-                        <span className="text-amber-600 text-sm">Inconsistent</span>
-                      )
-                    ) : (
-                      <span className="text-gray-400 text-sm">Not Found</span>
-                    )}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Citation Check</h2>
+              <p className="text-sm text-gray-500 mt-1">Business directory listings and NAP consistency</p>
+            </div>
+            {citations && citations.length > 0 && citationSummary && (
+              <div className="text-right">
+                <div className="text-2xl font-bold text-blue-600">{citationSummary.napConsistencyScore}%</div>
+                <div className="text-xs text-gray-500">NAP Consistency</div>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        <CardBody>
+          {/* No citations yet - show run button */}
+          {(!citations || citations.length === 0) && !isCitationLoading && (
+            <div className="text-center py-8">
+              {gbp ? (
+                <>
+                  <p className="text-gray-600 mb-4">
+                    Check your business listings across 36+ directories for NAP (Name, Address, Phone) consistency.
+                  </p>
+                  <Button onClick={runCitationCheck} disabled={isCitationLoading}>
+                    Run Citation Check
+                  </Button>
+                  {citationError && (
+                    <p className="text-red-500 text-sm mt-3">{citationError}</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-amber-600">
+                  Google Business Profile data is required to run citation check.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Loading state */}
+          {isCitationLoading && (
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+              <p className="text-gray-600">Checking 36+ business directories...</p>
+              <p className="text-sm text-gray-400 mt-2">This may take 1-2 minutes</p>
+            </div>
+          )}
+
+          {/* Results */}
+          {citations && citations.length > 0 && !isCitationLoading && (
+            <>
+              {/* Summary stats */}
+              {citationSummary && (
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="text-center p-3 bg-gray-50 rounded-lg">
+                    <div className="text-xl font-semibold">{citationSummary.totalChecked}</div>
+                    <div className="text-xs text-gray-500">Directories Checked</div>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 rounded-lg">
+                    <div className="text-xl font-semibold text-green-600">{citationSummary.found}</div>
+                    <div className="text-xs text-gray-500">Listings Found</div>
+                  </div>
+                  <div className="text-center p-3 bg-amber-50 rounded-lg">
+                    <div className="text-xl font-semibold text-amber-600">{citationSummary.withIssues}</div>
+                    <div className="text-xs text-gray-500">With Issues</div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardBody>
-        </Card>
-      )}
+              )}
+
+              {/* Citation grid */}
+              <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {citations.map((citation, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-4 rounded-lg border ${
+                      citation.found
+                        ? citation.napConsistent
+                          ? 'bg-green-50 border-green-200'
+                          : 'bg-amber-50 border-amber-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{citation.source}</span>
+                      {citation.found ? (
+                        citation.napConsistent ? (
+                          <span className="text-green-600 text-sm">Consistent</span>
+                        ) : (
+                          <span className="text-amber-600 text-sm">Inconsistent</span>
+                        )
+                      ) : (
+                        <span className="text-gray-400 text-sm">Not Found</span>
+                      )}
+                    </div>
+                    {citation.url && (
+                      <a
+                        href={citation.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-500 hover:underline mt-1 block truncate"
+                      >
+                        View listing
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Recommendations */}
+              {citationSummary?.recommendations && citationSummary.recommendations.length > 0 && (
+                <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                  <h4 className="font-medium text-blue-800 mb-2">Recommendations</h4>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    {citationSummary.recommendations.map((rec, idx) => (
+                      <li key={idx}>• {rec}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </CardBody>
+      </Card>
 
       {/* Actions */}
       <div className="flex justify-center gap-4 pt-4">
