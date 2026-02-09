@@ -137,14 +137,36 @@ export async function checkCitations(
 
     // Handle both array response and object with citations property
     let citationsArray: Record<string, unknown>[] = [];
+    let isDemoMode = false;
     if (Array.isArray(rawData)) {
       // Check if first item has 'citations' property (wrapped response)
       if (rawData.length === 1 && rawData[0] && typeof rawData[0] === 'object' && 'citations' in rawData[0]) {
-        citationsArray = (rawData[0] as Record<string, unknown>).citations as Record<string, unknown>[];
+        const wrappedResponse = rawData[0] as Record<string, unknown>;
+        citationsArray = wrappedResponse.citations as Record<string, unknown>[];
         console.log('Found wrapped response with citations array');
+
+        // Check if actor returned demo data (couldn't find the business)
+        const responseBusinessName = wrappedResponse.businessName as string | undefined;
+        if (responseBusinessName && responseBusinessName.toLowerCase().includes('demo')) {
+          isDemoMode = true;
+          console.warn('Citation checker returned demo data - business not found');
+        }
       } else {
         citationsArray = rawData as Record<string, unknown>[];
       }
+    }
+
+    // If demo mode, return a specific error
+    if (isDemoMode) {
+      return {
+        success: false,
+        totalDirectoriesChecked: 0,
+        directoriesFound: 0,
+        directoriesWithIssues: 0,
+        napConsistencyScore: 0,
+        citations: [],
+        error: 'Could not find business in directories. The citation checker could not locate listings for this business. This may happen if the business name, address, or phone number differs significantly across directories, or if the business has limited online presence.',
+      };
     }
 
     if (citationsArray.length > 0) {

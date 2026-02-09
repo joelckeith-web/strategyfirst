@@ -924,13 +924,21 @@ export function buildDataContext(input: AIAnalysisInput): string {
     context += '## Sitemap Analysis\nNo sitemap found - this is a technical SEO issue to address.\n\n';
   }
 
-  // Website crawl data - pages with titles for AI categorization
+  // Website crawl data - enriched pages with content, headings, and categorization
   if (input.websiteCrawl && Object.keys(input.websiteCrawl).length > 0) {
-    context += '## Website Crawl Data (Pages with Titles)\n';
-    context += '**IMPORTANT:** Analyze each page title and URL to determine page type.\n';
-    context += 'Service pages may NOT have "service" in the URL - look at the TITLE.\n';
-    context += 'Example: "/hvac-repair" with title "HVAC Repair Services" = SERVICE PAGE\n';
-    context += 'Example: "/our-work" with title "Our Recent Projects" = PORTFOLIO PAGE\n\n';
+    context += '## Website Crawl Data (Enriched Pages)\n';
+    context += '**Each page includes enriched data fields:**\n';
+    context += '- `pageType`: Pre-categorized as service/blog/location/about/faq/contact/portfolio/other — verify against title and content\n';
+    context += '- `contentPreview`: First 1,500 chars of actual page text — use for tone/voice analysis, USP extraction, team info, credentials\n';
+    context += '- `headings`: H1 and H2 tags — assess content structure, keyword targeting, topical depth\n';
+    context += '- `internalLinkCount` / `externalLinkCount`: Link counts — assess Hub+Spoke internal linking health\n';
+    context += '- `schemaTypes`: Per-page schema.org types found — evaluate AEO compliance per page\n\n';
+    context += '**Analysis guidance:**\n';
+    context += '- From `contentPreview`: Extract tone, messaging themes, USPs, team info, credentials, years in business\n';
+    context += '- From `headings`: Assess content structure, H1 keyword targeting, topical depth per page\n';
+    context += '- From `schemaTypes`: Evaluate AEO compliance per page, identify schema gaps\n';
+    context += '- From link counts: Assess Hub+Spoke internal linking, identify orphan pages (low internal links)\n';
+    context += '- Service pages may NOT have "service" in the URL — verify `pageType` against title and content\n\n';
     context += '```json\n' + JSON.stringify(input.websiteCrawl, null, 2) + '\n```\n\n';
   } else {
     context += '## Website Crawl Data\nNo website crawl data available.\n\n';
@@ -982,7 +990,8 @@ export function buildDataContext(input: AIAnalysisInput): string {
 
   context += '## CRITICAL: Extract These Fields FROM WEBSITE DATA (High Confidence)\n\n';
   context += 'The following fields MUST be extracted directly from the scraped website content.\n';
-  context += 'If found on the website, assign confidence 0.85+ (not low confidence).\n\n';
+  context += 'If found on the website, assign confidence 0.85+ (not low confidence).\n';
+  context += '**Use the enriched `contentPreview`, `headings`, and `schemaTypes` fields for direct extraction.**\n\n';
 
   context += '### From Service Area / Location Pages:\n';
   context += '- **serviceAreas**: Look for pages listing counties, cities, neighborhoods served\n';
@@ -996,11 +1005,11 @@ export function buildDataContext(input: AIAnalysisInput): string {
   context += '- **expertiseSignals**: Certifications, licenses, credentials mentioned\n';
   context += 'Common patterns: "Our Team", "Meet the Team", "About Us", team member cards/photos\n\n';
 
-  context += '### From Website Copy (Analyze Tone & Voice):\n';
-  context += '- **brandTone**: Analyze the writing style across pages (Professional/Friendly/Authoritative/Casual/Warm)\n';
-  context += '- **writingStyle**: Is it Formal, Conversational, Technical, or Educational?\n';
-  context += '- **keyMessaging**: What are the repeated themes/messages across pages?\n';
-  context += 'Analyze: headlines, taglines, about page copy, service descriptions, CTAs\n\n';
+  context += '### From Website Copy (Use `contentPreview` for Tone & Voice):\n';
+  context += '- **brandTone**: Analyze `contentPreview` text across pages (Professional/Friendly/Authoritative/Casual/Warm)\n';
+  context += '- **writingStyle**: Is it Formal, Conversational, Technical, or Educational? Check `contentPreview` for writing patterns\n';
+  context += '- **keyMessaging**: What themes repeat across `contentPreview` and `headings.h1`/`headings.h2`?\n';
+  context += 'Analyze: `contentPreview` from homepage, about, and service pages for tone and messaging themes\n\n';
 
   context += '### From Homepage / About / Service Pages:\n';
   context += '- **uniqueSellingPoints**: What do they emphasize as differentiators?\n';
@@ -1039,7 +1048,9 @@ export function buildDataContext(input: AIAnalysisInput): string {
   context += '- llms.txt status and recommended content\n\n';
 
   context += '## Hub+Spoke Content Analysis\n\n';
-  context += 'Evaluate the content architecture against Hub+Spoke methodology:\n\n';
+  context += 'Evaluate the content architecture against Hub+Spoke methodology.\n';
+  context += '**Use `internalLinkCount` and `externalLinkCount` per page to assess linking health.**\n';
+  context += 'Pages with high internal links (8+) may be hubs; pages with low internal links (<3) may be orphans.\n\n';
   context += '**Hub Page Standards (Pillar Content):**\n';
   context += '- Word count: 3,000-5,000 words\n';
   context += '- Covers main topic comprehensively\n';
@@ -1060,8 +1071,9 @@ export function buildDataContext(input: AIAnalysisInput): string {
   context += '- Consideration stage content (solution comparison, how-to)\n';
   context += '- Decision stage content (commercial, transactional)\n\n';
 
-  context += '## CRITICAL: Page Categorization (YOU Must Analyze)\n\n';
-  context += '**DO NOT trust URL patterns alone.** Analyze page TITLES to determine type:\n\n';
+  context += '## CRITICAL: Page Categorization (Verify Pre-Categorized `pageType`)\n\n';
+  context += '**Each page has a pre-categorized `pageType` field. Verify it against title, headings, and contentPreview.**\n';
+  context += 'The `pageType` uses URL+title heuristics and may misclassify some pages.\n\n';
   context += '### Service Page Indicators (in title):\n';
   context += '- Contains service name: "HVAC Repair", "Plumbing Services", "Home Inspection"\n';
   context += '- Action words: "Repair", "Installation", "Maintenance", "Cleaning"\n';
@@ -1100,7 +1112,8 @@ export function buildDataContext(input: AIAnalysisInput): string {
   context += '- Provide exact specs for each recommended location page\n\n';
 
   context += '## AEO (Answer Engine Optimization) Analysis\n\n';
-  context += 'Evaluate using Entity-First AEO Standards:\n\n';
+  context += 'Evaluate using Entity-First AEO Standards.\n';
+  context += '**Use per-page `schemaTypes` to assess schema compliance. Use `contentPreview` to check entity-first formatting.**\n\n';
   context += '**Entity-First Checklist (score each page):**\n';
   context += '- [ ] Brand/business name in first paragraph\n';
   context += '- [ ] 2+ sameAs platform references (LinkedIn, YouTube, etc.)\n';

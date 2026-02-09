@@ -101,8 +101,11 @@ Results stored in Supabase research_sessions table
 ### Citation Checker Integration (Jan 30, 2025)
 - Integrated `alizarin_refrigerator-owner/citation-checker-ai` Apify actor
 - Checks NAP consistency across 36+ business directories
-- Phase 4 of research now uses real citation data instead of placeholders
+- **Button-triggered** on results page (not automatic) - requires GBP data first
+- New endpoint: `POST /api/research/[id]/citations` triggers check, `GET` retrieves results
 - Returns: directories found, NAP consistency score, common issues, recommendations
+- Demo mode detection: returns clear error if actor can't find business (prevents fake data display)
+- UI shows loading state (~1-2 min), summary stats, citation grid with View Listing links
 
 ### Task Display Order (Research Progress UI)
 1. Google Business Profile (parallel with Sitemap)
@@ -110,9 +113,8 @@ Results stored in Supabase research_sessions table
 3. Competitor Research
 4. Website Crawl
 5. SEO Audit
-6. Citation Check
 
-Note: AI Analysis (Claude API) runs after data gathering completes but is not shown as a task card in the progress UI.
+Note: AI Analysis (Claude API) and Citation Check run after data gathering completes via buttons on results page.
 
 ## Database Tables
 
@@ -148,6 +150,8 @@ Note: AI Analysis (Claude API) runs after data gathering completes but is not sh
 | `src/services/ai/intakeAnalyzer.ts` | AI analysis orchestrator |
 | `src/services/ai/promptBuilder.ts` | Prompt construction for analysis |
 | `src/app/api/research/[id]/analyze/route.ts` | AI analysis endpoint |
+| `src/app/api/research/[id]/citations/route.ts` | Citation check endpoint (POST triggers, GET retrieves) |
+| `src/services/apify/citationChecker.ts` | Citation Checker AI actor service |
 | `src/app/api/research/[id]/verify/route.ts` | Manual verification endpoint |
 | `src/app/research/[id]/verify/page.tsx` | Verification form for low-confidence fields |
 | `src/types/ai-analysis.ts` | AI analysis type definitions |

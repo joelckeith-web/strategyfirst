@@ -1,5 +1,10 @@
 # Session Log
 
+## 2026-01-30
+Converted citation checker from automatic Phase 4 to button-triggered on results page with new `/api/research/[id]/citations` endpoint, fixed GBP Maps URL field (`mapsUrl` not `url`), added demo mode detection to return clear error when actor can't find business instead of showing fake data, and added citation summary UI with NAP consistency score, directory stats, and recommendations. Deployed to production.
+
+---
+
 ## 2026-01-28 (Session 4)
 **Major updates across AI analysis, verification flow, and crawler performance.**
 

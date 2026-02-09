@@ -72,7 +72,7 @@ export function transformCompetitorGBPs(
 ): CompetitorData[] {
   return inputs
     .filter(place => !excludeBusinessName || place.title !== excludeBusinessName)
-    .slice(0, 10)
+    .slice(0, 20)
     .map((place, index) => transformGooglePlacesToCompetitor(place, index + 1));
 }
 
@@ -95,10 +95,12 @@ export function transformWebsiteCrawlerToWebsiteData(
     schemaTypes: extractSchemaTypes(allHtml),
     description: firstPage?.description || null,
     title: firstPage?.title || null,
-    pages: inputs.slice(0, 50).map(page => ({
+    pages: inputs.slice(0, 150).map(page => ({
       url: page.url,
       title: page.title || '',
       wordCount: (page.text || '').split(/\s+/).filter(Boolean).length,
+      contentPreview: (page.text || '').slice(0, 1500),
+      pageType: categorizeUrl(page.url),
     })),
   };
 }

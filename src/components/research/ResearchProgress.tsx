@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+
+const STALE_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 
 type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
 
@@ -159,6 +161,9 @@ export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProp
   const [sessionStatus, setSessionStatus] = useState<ResearchSessionStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isStale, setIsStale] = useState(false);
+  const lastProgressRef = useRef<string>('');
+  const lastChangeTimeRef = useRef<number>(Date.now());
 
   // Derive task statuses from progress data
   const getTaskStatus = useCallback((taskKey: keyof typeof TASK_INFO): TaskStatus => {
@@ -221,6 +226,23 @@ export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProp
       setSessionStatus(data);
       setIsLoading(false);
 
+      // Track staleness: fingerprint the progress to detect changes
+      if (data.status === 'running') {
+        const progressFingerprint = JSON.stringify({
+          currentStep: data.progress.currentStep,
+          completedSteps: data.progress.completedSteps,
+          percentage: data.progress.percentage,
+        });
+
+        if (progressFingerprint !== lastProgressRef.current) {
+          lastProgressRef.current = progressFingerprint;
+          lastChangeTimeRef.current = Date.now();
+          setIsStale(false);
+        } else if (Date.now() - lastChangeTimeRef.current >= STALE_TIMEOUT_MS) {
+          setIsStale(true);
+        }
+      }
+
       // Notify parent when complete
       if (data.status === 'completed' && onComplete) {
         onComplete(data.results);
@@ -258,7 +280,8 @@ export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProp
   const canProceed = () => {
     if (!sessionStatus) return false;
     return sessionStatus.status === 'completed' ||
-      (sessionStatus.status !== 'running' && getCompletedCount() > 0);
+      (sessionStatus.status !== 'running' && getCompletedCount() > 0) ||
+      (isStale && getCompletedCount() > 0);
   };
 
   if (isLoading) {
@@ -362,7 +385,24 @@ export function ResearchProgress({ sessionId, onComplete }: ResearchProgressProp
           </div>
         )}
 
-        {sessionStatus?.status === 'running' && (
+        {isStale && sessionStatus?.status === 'running' && (
+          <div className="mt-6 p-4 bg-amber-50 border border-amber-300 rounded-lg">
+            <div className="flex items-start space-x-3">
+              <span className="text-xl flex-shrink-0">&#x26A0;&#xFE0F;</span>
+              <div>
+                <p className="text-sm font-medium text-amber-800">
+                  Research appears to be stuck
+                </p>
+                <p className="text-sm text-amber-700 mt-1">
+                  No progress has been detected for over 3 minutes. The background process may have timed out.
+                  You can view the results gathered so far using the button above.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {sessionStatus?.status === 'running' && !isStale && (
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
               This usually takes less than 5 minutes, but could take longer depending on the size of the website.

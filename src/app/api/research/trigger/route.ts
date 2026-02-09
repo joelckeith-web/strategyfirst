@@ -13,6 +13,175 @@ import { crawlWebsite } from '@/services/apify/websiteCrawler';
 import { extractSitemap, analyzeSitemapStructure } from '@/services/apify/sitemapExtractor';
 // Citation check is now triggered via button - see /api/research/[id]/citations
 
+// ============================================================
+// Page Data Extraction Helpers
+// ============================================================
+
+/**
+ * Categorize a page by its URL path and title
+ */
+function categorizePageByTitleAndUrl(url: string, title: string): string {
+  const lowerUrl = url.toLowerCase();
+  const lowerTitle = title.toLowerCase();
+
+  // Blog/article indicators
+  if (
+    lowerUrl.includes('/blog') ||
+    lowerUrl.includes('/news') ||
+    lowerUrl.includes('/article') ||
+    lowerUrl.includes('/post') ||
+    lowerTitle.match(/^(how to|what is|why |guide to|tips for|understanding|top \d+)/)
+  ) {
+    return 'blog';
+  }
+
+  // Location page indicators
+  if (
+    lowerUrl.includes('/location') ||
+    lowerUrl.includes('/area') ||
+    lowerUrl.includes('/service-area') ||
+    lowerUrl.match(/\/areas\/[a-z-]+/) ||
+    lowerTitle.match(/\bin\s+[A-Z][a-z]+,?\s+[A-Z]{2}\b/i) ||
+    lowerTitle.match(/serving (the )?/i)
+  ) {
+    return 'location';
+  }
+
+  // FAQ
+  if (lowerUrl.includes('/faq') || lowerTitle.includes('frequently asked') || lowerTitle.includes('faq')) {
+    return 'faq';
+  }
+
+  // About/team
+  if (
+    lowerUrl.includes('/about') ||
+    lowerUrl.includes('/team') ||
+    lowerUrl.includes('/our-story') ||
+    lowerUrl.includes('/staff') ||
+    lowerTitle.match(/\b(about|our (team|story|staff)|meet the)\b/i)
+  ) {
+    return 'about';
+  }
+
+  // Contact
+  if (lowerUrl.includes('/contact') || lowerTitle.match(/\bcontact\b/i)) {
+    return 'contact';
+  }
+
+  // Portfolio/gallery
+  if (
+    lowerUrl.includes('/portfolio') ||
+    lowerUrl.includes('/gallery') ||
+    lowerUrl.includes('/our-work') ||
+    lowerUrl.includes('/projects') ||
+    lowerTitle.match(/\b(gallery|portfolio|our work|projects|case stud)/i)
+  ) {
+    return 'portfolio';
+  }
+
+  // Service pages — check both URL and title for service indicators
+  if (
+    lowerUrl.includes('/service') ||
+    lowerUrl.includes('/what-we-do') ||
+    lowerUrl.includes('/solutions') ||
+    lowerTitle.match(/\b(repair|installation|maintenance|cleaning|inspection|service|removal|replacement)\b/i)
+  ) {
+    return 'service';
+  }
+
+  // Homepage
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/' || parsed.pathname === '') return 'other';
+  } catch { /* ignore */ }
+
+  return 'other';
+}
+
+/**
+ * Extract H1 and H2 headings from HTML
+ */
+function extractHeadings(html: string): { h1: string[]; h2: string[] } {
+  const h1s: string[] = [];
+  const h2s: string[] = [];
+
+  // Match h1 tags - strip inner HTML tags to get text only
+  const h1Regex = /<h1[^>]*>([\s\S]*?)<\/h1>/gi;
+  let match;
+  while ((match = h1Regex.exec(html)) !== null) {
+    const text = match[1].replace(/<[^>]+>/g, '').trim();
+    if (text) h1s.push(text.slice(0, 200));
+  }
+
+  // Match h2 tags
+  const h2Regex = /<h2[^>]*>([\s\S]*?)<\/h2>/gi;
+  while ((match = h2Regex.exec(html)) !== null) {
+    const text = match[1].replace(/<[^>]+>/g, '').trim();
+    if (text) h2s.push(text.slice(0, 200));
+  }
+
+  return { h1: h1s.slice(0, 5), h2: h2s.slice(0, 15) };
+}
+
+/**
+ * Count internal vs external links in HTML
+ */
+function countLinks(html: string, domain: string): { internal: number; external: number } {
+  let internal = 0;
+  let external = 0;
+
+  const linkRegex = /href=["']([^"']+)["']/gi;
+  let match;
+  const normalizedDomain = domain.toLowerCase().replace(/^www\./, '');
+
+  while ((match = linkRegex.exec(html)) !== null) {
+    const href = match[1];
+    // Skip anchors, mailto, tel, javascript
+    if (href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) {
+      continue;
+    }
+
+    try {
+      // Relative URLs are internal
+      if (href.startsWith('/') || !href.includes('://')) {
+        internal++;
+        continue;
+      }
+      const linkDomain = new URL(href).hostname.toLowerCase().replace(/^www\./, '');
+      if (linkDomain === normalizedDomain) {
+        internal++;
+      } else {
+        external++;
+      }
+    } catch {
+      // If URL parse fails, skip
+    }
+  }
+
+  return { internal, external };
+}
+
+/**
+ * Extract schema.org @type values from ld+json blocks in HTML
+ */
+function extractPageSchema(html: string): string[] {
+  const types: string[] = [];
+  const ldJsonRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let blockMatch;
+
+  while ((blockMatch = ldJsonRegex.exec(html)) !== null) {
+    const typeRegex = /"@type"\s*:\s*"([^"]+)"/g;
+    let typeMatch;
+    while ((typeMatch = typeRegex.exec(blockMatch[1])) !== null) {
+      if (!types.includes(typeMatch[1])) {
+        types.push(typeMatch[1]);
+      }
+    }
+  }
+
+  return types;
+}
+
 /**
  * Input from the client request
  */
@@ -694,15 +863,29 @@ async function triggerApifyResearch(
             title: homePage?.title || input.businessName,
             description: homePage?.metadata?.description || '',
             totalPages: crawlResult.totalPages,
-            // Store ALL crawled pages for AI to analyze and categorize
-            // AI will determine page types based on title + URL + content patterns
-            pages: crawlResult.pages.map(p => ({
-              url: p.url,
-              title: p.title || '',
-              description: p.metadata?.description || '',
-              // Estimate word count from text length (rough: 5 chars per word)
-              estimatedWordCount: p.text ? Math.round(p.text.length / 5) : 0,
-            })),
+            // Store ALL crawled pages with enriched data for AI analysis
+            pages: crawlResult.pages.map(p => {
+              const pageHtml = p.html || '';
+              const pageTitle = p.title || '';
+              const pageUrl = p.url;
+              let pageDomain = '';
+              try { pageDomain = new URL(input.website).hostname; } catch { /* ignore */ }
+
+              const linkCounts = pageHtml ? countLinks(pageHtml, pageDomain) : { internal: 0, external: 0 };
+
+              return {
+                url: pageUrl,
+                title: pageTitle,
+                description: p.metadata?.description || '',
+                estimatedWordCount: p.text ? Math.round(p.text.length / 5) : 0,
+                pageType: categorizePageByTitleAndUrl(pageUrl, pageTitle),
+                contentPreview: p.text ? p.text.slice(0, 1500) : '',
+                headings: pageHtml ? extractHeadings(pageHtml) : { h1: [], h2: [] },
+                internalLinkCount: linkCounts.internal,
+                externalLinkCount: linkCounts.external,
+                schemaTypes: pageHtml ? extractPageSchema(pageHtml) : [],
+              };
+            }),
           },
         };
       }
@@ -870,26 +1053,26 @@ async function triggerFallbackResearch(
             description: `${input.businessName} - Quality services`,
             title: input.businessName,
             totalPages: 18,
-            // Include realistic mock pages for AI categorization
+            // Include realistic mock pages with enriched data for AI analysis
             pages: [
-              { url: `${input.website}/`, title: `${input.businessName} | ${input.industry || 'Service Provider'} in ${input.city || 'Your Area'}`, description: 'Homepage', estimatedWordCount: 1200 },
-              { url: `${input.website}/about`, title: `About ${input.businessName} | Our Story`, description: 'About our company', estimatedWordCount: 800 },
-              { url: `${input.website}/contact`, title: `Contact Us | ${input.businessName}`, description: 'Get in touch', estimatedWordCount: 300 },
-              { url: `${input.website}/services`, title: `Our Services | ${input.businessName}`, description: 'Services we offer', estimatedWordCount: 1500 },
-              { url: `${input.website}/services/${mockServiceName}`, title: `${input.industry || 'Professional Services'} | ${input.businessName}`, description: 'Main service page', estimatedWordCount: 1800 },
-              { url: `${input.website}/services/${mockServiceName}-repair`, title: `${input.industry || 'Service'} Repair | ${input.businessName}`, description: 'Repair services', estimatedWordCount: 1200 },
-              { url: `${input.website}/services/${mockServiceName}-installation`, title: `${input.industry || 'Service'} Installation | ${input.businessName}`, description: 'Installation services', estimatedWordCount: 1100 },
-              { url: `${input.website}/services/${mockServiceName}-maintenance`, title: `${input.industry || 'Service'} Maintenance | ${input.businessName}`, description: 'Maintenance services', estimatedWordCount: 900 },
-              { url: `${input.website}/areas/${citySlug}`, title: `${input.industry || 'Services'} in ${input.city || 'Local Area'} | ${input.businessName}`, description: 'Service area page', estimatedWordCount: 1400 },
-              { url: `${input.website}/blog`, title: `Blog | ${input.businessName}`, description: 'Latest news and tips', estimatedWordCount: 600 },
-              { url: `${input.website}/blog/tips-for-homeowners`, title: `Top 10 Tips for Homeowners | ${input.businessName}`, description: 'Blog article', estimatedWordCount: 1500 },
-              { url: `${input.website}/blog/how-to-choose-a-provider`, title: `How to Choose a ${input.industry || 'Service'} Provider | ${input.businessName}`, description: 'Blog article', estimatedWordCount: 2000 },
-              { url: `${input.website}/blog/common-problems`, title: `Common Problems and Solutions | ${input.businessName}`, description: 'Blog article', estimatedWordCount: 1800 },
-              { url: `${input.website}/faq`, title: `Frequently Asked Questions | ${input.businessName}`, description: 'FAQ page', estimatedWordCount: 2500 },
-              { url: `${input.website}/testimonials`, title: `Customer Reviews | ${input.businessName}`, description: 'Testimonials', estimatedWordCount: 1000 },
-              { url: `${input.website}/gallery`, title: `Our Work | ${input.businessName}`, description: 'Project gallery', estimatedWordCount: 400 },
-              { url: `${input.website}/team`, title: `Meet Our Team | ${input.businessName}`, description: 'Our staff', estimatedWordCount: 700 },
-              { url: `${input.website}/privacy-policy`, title: `Privacy Policy | ${input.businessName}`, description: 'Legal', estimatedWordCount: 1200 },
+              { url: `${input.website}/`, title: `${input.businessName} | ${input.industry || 'Service Provider'} in ${input.city || 'Your Area'}`, description: 'Homepage', estimatedWordCount: 1200, pageType: 'other', contentPreview: `Welcome to ${input.businessName}. We are a trusted ${input.industry || 'service provider'} in ${input.city || 'your area'}. With years of experience, our team delivers quality results you can count on. Contact us today for a free consultation.`, headings: { h1: [`${input.businessName} - Trusted ${input.industry || 'Service Provider'}`], h2: ['Our Services', 'Why Choose Us', 'Service Areas', 'Contact Us Today'] }, internalLinkCount: 12, externalLinkCount: 2, schemaTypes: ['LocalBusiness', 'Organization'] },
+              { url: `${input.website}/about`, title: `About ${input.businessName} | Our Story`, description: 'About our company', estimatedWordCount: 800, pageType: 'about', contentPreview: `${input.businessName} was founded with a mission to provide exceptional ${input.industry?.toLowerCase() || 'services'} to homeowners and businesses in ${input.city || 'the local area'}. Our team of certified professionals brings over 15 years of combined experience.`, headings: { h1: [`About ${input.businessName}`], h2: ['Our Story', 'Our Mission', 'Why Choose Us'] }, internalLinkCount: 6, externalLinkCount: 1, schemaTypes: [] },
+              { url: `${input.website}/contact`, title: `Contact Us | ${input.businessName}`, description: 'Get in touch', estimatedWordCount: 300, pageType: 'contact', contentPreview: `Ready to get started? Contact ${input.businessName} today. Call us at (555) 123-4567 or fill out the form below for a free estimate.`, headings: { h1: ['Contact Us'], h2: ['Get a Free Quote', 'Our Location'] }, internalLinkCount: 4, externalLinkCount: 0, schemaTypes: [] },
+              { url: `${input.website}/services`, title: `Our Services | ${input.businessName}`, description: 'Services we offer', estimatedWordCount: 1500, pageType: 'service', contentPreview: `${input.businessName} offers a comprehensive range of ${input.industry?.toLowerCase() || 'professional'} services. From routine maintenance to emergency repairs, our certified technicians handle it all.`, headings: { h1: ['Our Services'], h2: ['Residential Services', 'Commercial Services', 'Emergency Services', 'Maintenance Plans'] }, internalLinkCount: 10, externalLinkCount: 1, schemaTypes: ['Service'] },
+              { url: `${input.website}/services/${mockServiceName}`, title: `${input.industry || 'Professional Services'} | ${input.businessName}`, description: 'Main service page', estimatedWordCount: 1800, pageType: 'service', contentPreview: `Looking for reliable ${input.industry?.toLowerCase() || 'professional services'}? ${input.businessName} provides comprehensive solutions backed by years of experience and industry certifications.`, headings: { h1: [`${input.industry || 'Professional Services'}`], h2: ['What We Offer', 'Our Process', 'Pricing', 'FAQ'] }, internalLinkCount: 8, externalLinkCount: 2, schemaTypes: ['Service', 'FAQPage'] },
+              { url: `${input.website}/services/${mockServiceName}-repair`, title: `${input.industry || 'Service'} Repair | ${input.businessName}`, description: 'Repair services', estimatedWordCount: 1200, pageType: 'service', contentPreview: `Need ${input.industry?.toLowerCase() || 'service'} repair? Our skilled technicians diagnose and fix issues quickly, with upfront pricing and satisfaction guaranteed.`, headings: { h1: [`${input.industry || 'Service'} Repair`], h2: ['Common Issues', 'Our Repair Process', 'When to Call a Pro'] }, internalLinkCount: 6, externalLinkCount: 1, schemaTypes: [] },
+              { url: `${input.website}/services/${mockServiceName}-installation`, title: `${input.industry || 'Service'} Installation | ${input.businessName}`, description: 'Installation services', estimatedWordCount: 1100, pageType: 'service', contentPreview: `Professional ${input.industry?.toLowerCase() || 'service'} installation by ${input.businessName}. We handle everything from selection to setup, ensuring optimal performance.`, headings: { h1: [`${input.industry || 'Service'} Installation`], h2: ['Installation Process', 'What to Expect', 'Brands We Carry'] }, internalLinkCount: 5, externalLinkCount: 1, schemaTypes: [] },
+              { url: `${input.website}/services/${mockServiceName}-maintenance`, title: `${input.industry || 'Service'} Maintenance | ${input.businessName}`, description: 'Maintenance services', estimatedWordCount: 900, pageType: 'service', contentPreview: `Regular maintenance keeps your systems running efficiently. ${input.businessName} offers affordable maintenance plans tailored to your needs.`, headings: { h1: [`${input.industry || 'Service'} Maintenance`], h2: ['Maintenance Plans', 'Benefits', 'Schedule Service'] }, internalLinkCount: 5, externalLinkCount: 0, schemaTypes: [] },
+              { url: `${input.website}/areas/${citySlug}`, title: `${input.industry || 'Services'} in ${input.city || 'Local Area'} | ${input.businessName}`, description: 'Service area page', estimatedWordCount: 1400, pageType: 'location', contentPreview: `${input.businessName} proudly serves ${input.city || 'the local area'} and surrounding communities. Our team knows the area well and provides fast, reliable service.`, headings: { h1: [`${input.industry || 'Services'} in ${input.city || 'Local Area'}`], h2: ['Areas We Serve', 'Local Services', 'Why Local Matters', 'Contact Us'] }, internalLinkCount: 8, externalLinkCount: 0, schemaTypes: ['LocalBusiness'] },
+              { url: `${input.website}/blog`, title: `Blog | ${input.businessName}`, description: 'Latest news and tips', estimatedWordCount: 600, pageType: 'blog', contentPreview: `Stay informed with the latest tips, news, and insights from ${input.businessName}. Our blog covers everything from DIY tips to industry trends.`, headings: { h1: ['Blog'], h2: ['Latest Posts', 'Categories'] }, internalLinkCount: 10, externalLinkCount: 0, schemaTypes: [] },
+              { url: `${input.website}/blog/tips-for-homeowners`, title: `Top 10 Tips for Homeowners | ${input.businessName}`, description: 'Blog article', estimatedWordCount: 1500, pageType: 'blog', contentPreview: `As a homeowner, maintaining your property is essential. Here are our top 10 tips to keep your home in great shape year-round, from seasonal maintenance to emergency preparedness.`, headings: { h1: ['Top 10 Tips for Homeowners'], h2: ['Tip 1: Schedule Regular Inspections', 'Tip 2: Know Your Systems', 'Tip 3: Preventive Maintenance'] }, internalLinkCount: 4, externalLinkCount: 2, schemaTypes: ['Article'] },
+              { url: `${input.website}/blog/how-to-choose-a-provider`, title: `How to Choose a ${input.industry || 'Service'} Provider | ${input.businessName}`, description: 'Blog article', estimatedWordCount: 2000, pageType: 'blog', contentPreview: `Choosing the right ${input.industry?.toLowerCase() || 'service'} provider can feel overwhelming. This guide walks you through the key factors to consider, from licensing and insurance to reviews and pricing.`, headings: { h1: [`How to Choose a ${input.industry || 'Service'} Provider`], h2: ['Check Credentials', 'Read Reviews', 'Get Multiple Quotes', 'Ask the Right Questions'] }, internalLinkCount: 5, externalLinkCount: 3, schemaTypes: ['Article'] },
+              { url: `${input.website}/blog/common-problems`, title: `Common Problems and Solutions | ${input.businessName}`, description: 'Blog article', estimatedWordCount: 1800, pageType: 'blog', contentPreview: `Dealing with common ${input.industry?.toLowerCase() || 'service'} problems? Learn about the most frequent issues we see and when to call a professional versus attempting a DIY fix.`, headings: { h1: ['Common Problems and Solutions'], h2: ['Problem 1', 'Problem 2', 'Problem 3', 'When to Call a Pro'] }, internalLinkCount: 6, externalLinkCount: 1, schemaTypes: ['Article'] },
+              { url: `${input.website}/faq`, title: `Frequently Asked Questions | ${input.businessName}`, description: 'FAQ page', estimatedWordCount: 2500, pageType: 'faq', contentPreview: `Find answers to the most common questions about our ${input.industry?.toLowerCase() || 'services'}. From pricing to scheduling, we've got you covered.`, headings: { h1: ['Frequently Asked Questions'], h2: ['General Questions', 'Pricing', 'Scheduling', 'Service Details'] }, internalLinkCount: 8, externalLinkCount: 0, schemaTypes: ['FAQPage'] },
+              { url: `${input.website}/testimonials`, title: `Customer Reviews | ${input.businessName}`, description: 'Testimonials', estimatedWordCount: 1000, pageType: 'other', contentPreview: `See what our customers are saying about ${input.businessName}. We're proud of our 4.5-star rating and hundreds of happy customers.`, headings: { h1: ['Customer Reviews'], h2: ['What Our Customers Say', 'Leave a Review'] }, internalLinkCount: 3, externalLinkCount: 1, schemaTypes: [] },
+              { url: `${input.website}/gallery`, title: `Our Work | ${input.businessName}`, description: 'Project gallery', estimatedWordCount: 400, pageType: 'portfolio', contentPreview: `Browse our portfolio of completed projects. From residential to commercial, see the quality of work ${input.businessName} delivers.`, headings: { h1: ['Our Work'], h2: ['Residential Projects', 'Commercial Projects'] }, internalLinkCount: 4, externalLinkCount: 0, schemaTypes: [] },
+              { url: `${input.website}/team`, title: `Meet Our Team | ${input.businessName}`, description: 'Our staff', estimatedWordCount: 700, pageType: 'about', contentPreview: `Meet the experienced professionals behind ${input.businessName}. Our team includes certified technicians with over 50 years of combined experience.`, headings: { h1: ['Meet Our Team'], h2: ['Leadership', 'Our Technicians', 'Join Our Team'] }, internalLinkCount: 5, externalLinkCount: 0, schemaTypes: [] },
+              { url: `${input.website}/privacy-policy`, title: `Privacy Policy | ${input.businessName}`, description: 'Legal', estimatedWordCount: 1200, pageType: 'other', contentPreview: `This privacy policy describes how ${input.businessName} collects, uses, and protects your personal information when you use our website.`, headings: { h1: ['Privacy Policy'], h2: ['Information We Collect', 'How We Use Information', 'Your Rights'] }, internalLinkCount: 2, externalLinkCount: 0, schemaTypes: [] },
             ],
             _mock: true,
           },
