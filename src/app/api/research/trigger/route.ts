@@ -841,19 +841,48 @@ async function triggerApifyResearch(
           }
         }) || crawlResult.pages[0];
 
-        const allHtml = crawlResult.pages.map(p => p.html || '').join(' ');
-
+        // Detect CMS and schema from first few pages only (no need to scan all HTML)
         let cms = 'Unknown';
-        if (allHtml.includes('wp-content') || allHtml.includes('wordpress')) cms = 'WordPress';
-        else if (allHtml.includes('wix.com')) cms = 'Wix';
-        else if (allHtml.includes('squarespace')) cms = 'Squarespace';
-        else if (allHtml.includes('shopify')) cms = 'Shopify';
+        let hasStructuredData = false;
+        const siteSchemaTypes: string[] = [];
 
-        const hasStructuredData = allHtml.includes('application/ld+json');
-        const schemaTypes: string[] = [];
-        if (allHtml.includes('LocalBusiness')) schemaTypes.push('LocalBusiness');
-        if (allHtml.includes('Organization')) schemaTypes.push('Organization');
-        if (allHtml.includes('WebSite')) schemaTypes.push('WebSite');
+        for (const p of crawlResult.pages.slice(0, 10)) {
+          const html = p.html || '';
+          if (cms === 'Unknown') {
+            if (html.includes('wp-content') || html.includes('wordpress')) cms = 'WordPress';
+            else if (html.includes('wix.com')) cms = 'Wix';
+            else if (html.includes('squarespace')) cms = 'Squarespace';
+            else if (html.includes('shopify')) cms = 'Shopify';
+          }
+          if (html.includes('application/ld+json')) hasStructuredData = true;
+          if (html.includes('LocalBusiness') && !siteSchemaTypes.includes('LocalBusiness')) siteSchemaTypes.push('LocalBusiness');
+          if (html.includes('Organization') && !siteSchemaTypes.includes('Organization')) siteSchemaTypes.push('Organization');
+          if (html.includes('WebSite') && !siteSchemaTypes.includes('WebSite')) siteSchemaTypes.push('WebSite');
+        }
+
+        // Extract domain once for link counting
+        let pageDomain = '';
+        try { pageDomain = new URL(input.website).hostname; } catch { /* ignore */ }
+
+        // Enrich pages — only run HTML parsing on first 50 pages to stay fast
+        const pages = crawlResult.pages.map((p, i) => {
+          const pageTitle = p.title || '';
+          const pageUrl = p.url;
+          const doHtmlParsing = i < 50 && !!p.html;
+
+          return {
+            url: pageUrl,
+            title: pageTitle,
+            description: p.metadata?.description || '',
+            estimatedWordCount: p.text ? Math.round(p.text.length / 5) : 0,
+            pageType: categorizePageByTitleAndUrl(pageUrl, pageTitle),
+            contentPreview: p.text ? p.text.slice(0, 1500) : '',
+            headings: doHtmlParsing ? extractHeadings(p.html!) : { h1: [], h2: [] },
+            internalLinkCount: doHtmlParsing ? countLinks(p.html!, pageDomain).internal : 0,
+            externalLinkCount: doHtmlParsing ? countLinks(p.html!, pageDomain).external : 0,
+            schemaTypes: doHtmlParsing ? extractPageSchema(p.html!) : [],
+          };
+        });
 
         return {
           success: true,
@@ -862,33 +891,11 @@ async function triggerApifyResearch(
             ssl: input.website.startsWith('https'),
             mobileResponsive: true,
             structuredData: hasStructuredData,
-            schemaTypes,
+            schemaTypes: siteSchemaTypes,
             title: homePage?.title || input.businessName,
             description: homePage?.metadata?.description || '',
             totalPages: crawlResult.totalPages,
-            // Store ALL crawled pages with enriched data for AI analysis
-            pages: crawlResult.pages.map(p => {
-              const pageHtml = p.html || '';
-              const pageTitle = p.title || '';
-              const pageUrl = p.url;
-              let pageDomain = '';
-              try { pageDomain = new URL(input.website).hostname; } catch { /* ignore */ }
-
-              const linkCounts = pageHtml ? countLinks(pageHtml, pageDomain) : { internal: 0, external: 0 };
-
-              return {
-                url: pageUrl,
-                title: pageTitle,
-                description: p.metadata?.description || '',
-                estimatedWordCount: p.text ? Math.round(p.text.length / 5) : 0,
-                pageType: categorizePageByTitleAndUrl(pageUrl, pageTitle),
-                contentPreview: p.text ? p.text.slice(0, 1500) : '',
-                headings: pageHtml ? extractHeadings(pageHtml) : { h1: [], h2: [] },
-                internalLinkCount: linkCounts.internal,
-                externalLinkCount: linkCounts.external,
-                schemaTypes: pageHtml ? extractPageSchema(pageHtml) : [],
-              };
-            }),
+            pages,
           },
         };
       }
