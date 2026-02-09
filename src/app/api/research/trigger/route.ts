@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { supabaseAdmin } from '@/lib/supabase/client';
 import type { ResearchSessionInsert, Json } from '@/lib/supabase/types';
+
+// Allow up to 5 minutes for Apify actors (competitors can take 10min waitForFinish)
+export const maxDuration = 300;
 import {
   searchGooglePlaces,
   getGooglePlaceByUrl,
