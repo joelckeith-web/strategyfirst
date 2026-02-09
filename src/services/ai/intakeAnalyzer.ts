@@ -33,9 +33,9 @@ export interface AnalyzeResult {
 }
 
 /**
- * Create a default inferred field with low confidence
+ * Create a default field for truly unknowable data (retention rate, lead volume, etc.)
  */
-function createDefaultField<T>(value: T, reason: string): InferredField<T> {
+function createUnknownField<T>(value: T, reason: string): InferredField<T> {
   return {
     value,
     source: 'ai',
@@ -45,20 +45,32 @@ function createDefaultField<T>(value: T, reason: string): InferredField<T> {
 }
 
 /**
+ * Create a default field for data that can be reasonably inferred from industry/context
+ */
+function createInferrableField<T>(value: T, reason: string): InferredField<T> {
+  return {
+    value,
+    source: 'ai',
+    confidence: 0.4,
+    reasoning: reason,
+  };
+}
+
+/**
  * Create default business context fields
  */
 function createDefaultBusinessContext(input: AIAnalysisInput): BusinessContextFields {
   return {
-    companyName: createDefaultField(input.businessName, 'From user input'),
-    yearsInBusiness: createDefaultField(null, 'Unable to determine'),
-    teamSize: createDefaultField(null, 'Unable to determine'),
-    primaryIndustry: createDefaultField(input.industry || 'Service Provider', 'From user input or default'),
-    businessDescription: createDefaultField(`${input.businessName} - Local business`, 'Generated default'),
-    uniqueSellingPoints: createDefaultField([], 'Unable to determine'),
-    targetAudience: createDefaultField('Local customers', 'Default assumption'),
-    competitiveAdvantages: createDefaultField([], 'Unable to determine'),
-    businessModel: createDefaultField('B2C', 'Default assumption for local business'),
-    seasonality: createDefaultField(null, 'Unable to determine'),
+    companyName: createUnknownField(input.businessName, 'From user input'),
+    yearsInBusiness: createUnknownField(null, 'Unable to determine'),
+    teamSize: createUnknownField(null, 'Unable to determine'),
+    primaryIndustry: createInferrableField(input.industry || 'Service Provider', 'From user input or default'),
+    businessDescription: createInferrableField(`${input.businessName} - Local business`, 'Generated default'),
+    uniqueSellingPoints: createUnknownField([], 'Unable to determine'),
+    targetAudience: createInferrableField('Local customers', 'Default assumption for local business'),
+    competitiveAdvantages: createUnknownField([], 'Unable to determine'),
+    businessModel: createInferrableField('B2C', 'Default assumption for local business'),
+    seasonality: createInferrableField(null, 'Can be inferred from industry and location'),
   };
 }
 
@@ -67,18 +79,18 @@ function createDefaultBusinessContext(input: AIAnalysisInput): BusinessContextFi
  */
 function createDefaultRevenueServices(input: AIAnalysisInput): RevenueServicesFields {
   return {
-    primaryServices: createDefaultField([], 'Unable to determine'),
-    secondaryServices: createDefaultField([], 'Unable to determine'),
-    serviceDeliveryMethod: createDefaultField(['On-site'], 'Default assumption'),
-    averageTransactionValue: createDefaultField(null, 'Unable to determine'),
-    pricingModel: createDefaultField('Project-based', 'Default assumption'),
-    topRevenueServices: createDefaultField([], 'Unable to determine'),
-    serviceAreaType: createDefaultField('Local', 'Default assumption'),
-    serviceRadius: createDefaultField(null, 'Unable to determine'),
-    clientRetentionRate: createDefaultField(null, 'Unable to determine'),
-    referralPercentage: createDefaultField(null, 'Unable to determine'),
-    upsellOpportunities: createDefaultField([], 'Unable to determine'),
-    recurringRevenueServices: createDefaultField([], 'Unable to determine'),
+    primaryServices: createUnknownField([], 'Unable to determine'),
+    secondaryServices: createUnknownField([], 'Unable to determine'),
+    serviceDeliveryMethod: createInferrableField(['On-site'], 'Default assumption for local business'),
+    averageTransactionValue: createUnknownField(null, 'Unable to determine - requires business input'),
+    pricingModel: createInferrableField('Project-based', 'Default assumption'),
+    topRevenueServices: createUnknownField([], 'Unable to determine'),
+    serviceAreaType: createInferrableField('Local', 'Default assumption for local business'),
+    serviceRadius: createUnknownField(null, 'Unable to determine'),
+    clientRetentionRate: createUnknownField(null, 'Unable to determine - requires business input'),
+    referralPercentage: createUnknownField(null, 'Unable to determine - requires business input'),
+    upsellOpportunities: createUnknownField([], 'Unable to determine'),
+    recurringRevenueServices: createUnknownField([], 'Unable to determine'),
   };
 }
 
@@ -88,19 +100,19 @@ function createDefaultRevenueServices(input: AIAnalysisInput): RevenueServicesFi
 function createDefaultLocalSEO(input: AIAnalysisInput): LocalSEOFields {
   const gbpData = input.gbp as Record<string, unknown> | undefined;
   return {
-    gbpStatus: createDefaultField(gbpData ? 'claimed' : 'unknown', gbpData ? 'GBP data found' : 'No GBP data'),
-    gbpCompleteness: createDefaultField(0, 'Unable to determine'),
-    gbpRating: createDefaultField(null, 'Unable to determine'),
-    gbpReviewCount: createDefaultField(null, 'Unable to determine'),
-    gbpCategories: createDefaultField([], 'Unable to determine'),
-    gbpPhotosCount: createDefaultField(null, 'Unable to determine'),
-    primaryServiceArea: createDefaultField(
+    gbpStatus: createInferrableField(gbpData ? 'claimed' : 'unknown', gbpData ? 'GBP data found' : 'No GBP data'),
+    gbpCompleteness: createUnknownField(0, 'Unable to determine'),
+    gbpRating: createUnknownField(null, 'Unable to determine'),
+    gbpReviewCount: createUnknownField(null, 'Unable to determine'),
+    gbpCategories: createUnknownField([], 'Unable to determine'),
+    gbpPhotosCount: createUnknownField(null, 'Unable to determine'),
+    primaryServiceArea: createInferrableField(
       [input.city, input.state].filter(Boolean).join(', ') || 'Local area',
       'From user input'
     ),
-    serviceAreas: createDefaultField([], 'Unable to determine'),
-    napConsistency: createDefaultField(0, 'Unable to determine'),
-    citationScore: createDefaultField(null, 'Unable to determine'),
+    serviceAreas: createUnknownField([], 'Unable to determine'),
+    napConsistency: createUnknownField(0, 'Unable to determine'),
+    citationScore: createUnknownField(null, 'Unable to determine'),
   };
 }
 
@@ -109,27 +121,27 @@ function createDefaultLocalSEO(input: AIAnalysisInput): LocalSEOFields {
  */
 function createDefaultWebsiteReadiness(input: AIAnalysisInput): WebsiteReadinessFields {
   return {
-    websiteUrl: createDefaultField(input.website, 'From user input'),
-    cms: createDefaultField(null, 'Unable to determine'),
-    hasSsl: createDefaultField(input.website.startsWith('https'), 'From URL protocol'),
-    isMobileResponsive: createDefaultField(true, 'Default assumption'),
-    hasStructuredData: createDefaultField(false, 'Unable to determine'),
-    schemaTypes: createDefaultField([], 'Unable to determine'),
-    pageCount: createDefaultField(null, 'Unable to determine'),
-    hasServicePages: createDefaultField(false, 'Unable to determine'),
-    servicePageCount: createDefaultField(null, 'Unable to determine'),
-    hasBlogSection: createDefaultField(false, 'Unable to determine'),
-    blogPostCount: createDefaultField(null, 'Unable to determine'),
-    hasLocationPages: createDefaultField(false, 'Unable to determine'),
-    locationPageCount: createDefaultField(null, 'Unable to determine'),
-    hasHubPages: createDefaultField(false, 'Unable to determine'),
-    hubPageCount: createDefaultField(null, 'Unable to determine'),
-    averagePageWordCount: createDefaultField('Thin (<1000)', 'Default assumption'),
-    hasRobotsTxt: createDefaultField(false, 'Unable to determine'),
-    hasLlmsTxt: createDefaultField(false, 'Unable to determine'),
-    loadSpeed: createDefaultField(null, 'Unable to determine'),
-    seoScore: createDefaultField(null, 'Unable to determine'),
-    contentDepthScore: createDefaultField(null, 'Unable to determine'),
+    websiteUrl: createUnknownField(input.website, 'From user input'),
+    cms: createUnknownField(null, 'Unable to determine'),
+    hasSsl: createInferrableField(input.website.startsWith('https'), 'From URL protocol'),
+    isMobileResponsive: createInferrableField(true, 'Default assumption - most modern sites are responsive'),
+    hasStructuredData: createUnknownField(false, 'Unable to determine'),
+    schemaTypes: createUnknownField([], 'Unable to determine'),
+    pageCount: createUnknownField(null, 'Unable to determine'),
+    hasServicePages: createUnknownField(false, 'Unable to determine'),
+    servicePageCount: createUnknownField(null, 'Unable to determine'),
+    hasBlogSection: createUnknownField(false, 'Unable to determine'),
+    blogPostCount: createUnknownField(null, 'Unable to determine'),
+    hasLocationPages: createUnknownField(false, 'Unable to determine'),
+    locationPageCount: createUnknownField(null, 'Unable to determine'),
+    hasHubPages: createUnknownField(false, 'Unable to determine'),
+    hubPageCount: createUnknownField(null, 'Unable to determine'),
+    averagePageWordCount: createInferrableField('Thin (<1000)', 'Default assumption'),
+    hasRobotsTxt: createUnknownField(false, 'Unable to determine'),
+    hasLlmsTxt: createUnknownField(false, 'Unable to determine'),
+    loadSpeed: createUnknownField(null, 'Unable to determine'),
+    seoScore: createUnknownField(null, 'Unable to determine'),
+    contentDepthScore: createUnknownField(null, 'Unable to determine'),
   };
 }
 
@@ -138,14 +150,14 @@ function createDefaultWebsiteReadiness(input: AIAnalysisInput): WebsiteReadiness
  */
 function createDefaultToneVoice(): ToneVoiceFields {
   return {
-    brandTone: createDefaultField('Professional', 'Default assumption'),
-    writingStyle: createDefaultField('Conversational', 'Default assumption'),
-    keyMessaging: createDefaultField([], 'Unable to determine'),
-    brandPersonality: createDefaultField([], 'Unable to determine'),
-    targetEmotions: createDefaultField([], 'Unable to determine'),
-    communicationStyle: createDefaultField('Direct', 'Default assumption'),
-    industryJargonLevel: createDefaultField('Moderate', 'Default assumption'),
-    callToActionStyle: createDefaultField('Value-focused', 'Default assumption'),
+    brandTone: createInferrableField('Professional', 'Default assumption - can be inferred from content'),
+    writingStyle: createInferrableField('Conversational', 'Default assumption - can be inferred from content'),
+    keyMessaging: createUnknownField([], 'Unable to determine'),
+    brandPersonality: createUnknownField([], 'Unable to determine'),
+    targetEmotions: createUnknownField([], 'Unable to determine'),
+    communicationStyle: createInferrableField('Direct', 'Default assumption'),
+    industryJargonLevel: createInferrableField('Moderate', 'Default assumption'),
+    callToActionStyle: createInferrableField('Value-focused', 'Default assumption'),
   };
 }
 
@@ -154,14 +166,14 @@ function createDefaultToneVoice(): ToneVoiceFields {
  */
 function createDefaultConversionMeasurement(): ConversionMeasurementFields {
   return {
-    primaryConversionGoal: createDefaultField('Phone calls', 'Default for local business'),
-    secondaryConversionGoals: createDefaultField(['Form submissions'], 'Default assumption'),
-    currentTrackingSetup: createDefaultField(['None detected'], 'Unable to determine'),
-    phoneTrackingStatus: createDefaultField(null, 'Unable to determine'),
-    formTrackingStatus: createDefaultField(null, 'Unable to determine'),
-    currentLeadVolume: createDefaultField(null, 'Unable to determine'),
-    conversionRate: createDefaultField(null, 'Unable to determine'),
-    customerJourneyLength: createDefaultField('1-7 days', 'Default assumption'),
+    primaryConversionGoal: createInferrableField('Phone calls', 'Default for local business'),
+    secondaryConversionGoals: createInferrableField(['Form submissions'], 'Default assumption'),
+    currentTrackingSetup: createUnknownField(['None detected'], 'Unable to determine'),
+    phoneTrackingStatus: createUnknownField(null, 'Unable to determine'),
+    formTrackingStatus: createUnknownField(null, 'Unable to determine'),
+    currentLeadVolume: createUnknownField(null, 'Unable to determine - requires business input'),
+    conversionRate: createUnknownField(null, 'Unable to determine - requires business input'),
+    customerJourneyLength: createInferrableField('1-7 days', 'Default assumption - can be inferred from industry'),
   };
 }
 
@@ -170,21 +182,21 @@ function createDefaultConversionMeasurement(): ConversionMeasurementFields {
  */
 function createDefaultAIConsiderations(): AIConsiderationsFields {
   return {
-    aiSearchVisibility: createDefaultField('Unknown', 'Unable to determine'),
-    contentDepth: createDefaultField('Basic', 'Default assumption'),
-    expertiseSignals: createDefaultField([], 'Unable to determine'),
-    trustSignals: createDefaultField([], 'Unable to determine'),
-    authorshipClarity: createDefaultField(false, 'Unable to determine'),
-    contentFreshness: createDefaultField('Unknown', 'Unable to determine'),
-    citationWorthiness: createDefaultField('Low', 'Default assumption'),
-    llmReadinessScore: createDefaultField(30, 'Default low score'),
-    entityFirstScore: createDefaultField(20, 'Default low score - needs entity-first formatting'),
-    hasSameAsReferences: createDefaultField(false, 'Unable to determine'),
-    sameAsPlatforms: createDefaultField([], 'Unable to determine'),
-    hasAuthorBio: createDefaultField(false, 'Unable to determine'),
-    hasCredentials: createDefaultField(false, 'Unable to determine'),
-    aeoComplianceScore: createDefaultField(20, 'Default low score - needs AEO optimization'),
-    hubSpokeScore: createDefaultField(20, 'Default low score - needs Hub+Spoke content architecture'),
+    aiSearchVisibility: createUnknownField('Unknown', 'Unable to determine'),
+    contentDepth: createInferrableField('Basic', 'Default assumption'),
+    expertiseSignals: createUnknownField([], 'Unable to determine'),
+    trustSignals: createUnknownField([], 'Unable to determine'),
+    authorshipClarity: createUnknownField(false, 'Unable to determine'),
+    contentFreshness: createUnknownField('Unknown', 'Unable to determine'),
+    citationWorthiness: createInferrableField('Low', 'Default assumption'),
+    llmReadinessScore: createInferrableField(30, 'Default low score'),
+    entityFirstScore: createInferrableField(20, 'Default low score - needs entity-first formatting'),
+    hasSameAsReferences: createUnknownField(false, 'Unable to determine'),
+    sameAsPlatforms: createUnknownField([], 'Unable to determine'),
+    hasAuthorBio: createUnknownField(false, 'Unable to determine'),
+    hasCredentials: createUnknownField(false, 'Unable to determine'),
+    aeoComplianceScore: createInferrableField(20, 'Default low score - needs AEO optimization'),
+    hubSpokeScore: createInferrableField(20, 'Default low score - needs Hub+Spoke content architecture'),
   };
 }
 
@@ -431,7 +443,7 @@ function createFallbackResult(input: AIAnalysisInput, error: string): AIAnalysis
       aiConsiderations: createDefaultAIConsiderations(),
     },
     insights: createDefaultInsights(),
-    overallConfidence: 0.1,
+    overallConfidence: 0.2,
     fieldsAnalyzed: 68,
     fieldsWithHighConfidence: 0,
     fieldsWithLowConfidence: 68,
@@ -553,6 +565,49 @@ function parseAIResponse(
 }
 
 /**
+ * Attempt to repair truncated JSON by closing unclosed braces/brackets
+ */
+function repairTruncatedJson(text: string): string {
+  // Strip any trailing incomplete string value
+  let repaired = text.replace(/,\s*"[^"]*$/, '');
+  // Strip trailing incomplete key-value pair
+  repaired = repaired.replace(/,\s*"[^"]*"\s*:\s*[^,}\]]*$/, '');
+
+  // Count unclosed braces and brackets
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const char of repaired) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (char === '{') openBraces++;
+    else if (char === '}') openBraces--;
+    else if (char === '[') openBrackets++;
+    else if (char === ']') openBrackets--;
+  }
+
+  // Close any unclosed brackets then braces
+  for (let i = 0; i < openBrackets; i++) repaired += ']';
+  for (let i = 0; i < openBraces; i++) repaired += '}';
+
+  return repaired;
+}
+
+/**
  * Analyze research data using Claude AI
  */
 export async function analyzeIntakeData(input: AIAnalysisInput): Promise<AnalyzeResult> {
@@ -601,21 +656,35 @@ export async function analyzeIntakeData(input: AIAnalysisInput): Promise<Analyze
     };
   }
 
-  // Parse the response
-  console.log('Claude raw response length:', result.data.content.length);
-  console.log('Claude response preview:', result.data.content.slice(0, 500));
-  console.log('Claude response end:', result.data.content.slice(-500));
+  // Check for truncated response
+  let responseContent = result.data.content;
+  if (result.data.stopReason === 'max_tokens') {
+    console.warn('⚠️ Claude response was truncated (stop_reason: max_tokens). Attempting to repair JSON...');
+    responseContent = repairTruncatedJson(responseContent);
+  }
 
-  const analysisResult = parseAIResponse(result.data.content, input);
+  // Parse the response
+  console.log('Claude raw response length:', responseContent.length);
+  console.log('Claude stop_reason:', result.data.stopReason);
+  console.log('Claude response preview:', responseContent.slice(0, 500));
+  console.log('Claude response end:', responseContent.slice(-500));
+
+  const analysisResult = parseAIResponse(responseContent, input);
 
   if (!analysisResult) {
     console.error('Failed to parse Claude response');
-    console.error('Full response:', result.data.content);
+    console.error('Full response:', responseContent);
     return {
       success: true,
       data: createFallbackResult(input, 'Failed to parse AI response'),
       estimatedCost,
     };
+  }
+
+  // Add warning if response was truncated
+  if (result.data.stopReason === 'max_tokens') {
+    analysisResult.warnings = analysisResult.warnings || [];
+    analysisResult.warnings.push('AI response was truncated (max_tokens reached). Some insights may be incomplete.');
   }
 
   // Update with actual token usage and timing

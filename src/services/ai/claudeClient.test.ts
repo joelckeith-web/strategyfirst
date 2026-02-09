@@ -320,8 +320,8 @@ describe('ClaudeClient', () => {
 
       expect(result.success).toBe(false);
       expect(result.error?.type).toBe('server_error');
-      // Initial attempt + maxRetries (3)
-      expect(mockFetch).toHaveBeenCalledTimes(4);
+      // Initial attempt + maxRetries (1)
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
     it('should handle network errors', async () => {
@@ -421,7 +421,7 @@ describe('ClaudeClient', () => {
       expect(callBody.system).toBe('You are an expert analyst.');
       expect(callBody.messages[0].role).toBe('user');
       expect(callBody.messages[0].content).toBe('Analyze this data...');
-      expect(callBody.max_tokens).toBe(8192);
+      expect(callBody.max_tokens).toBe(16384);
     });
 
     it('should use default temperature when not provided', async () => {

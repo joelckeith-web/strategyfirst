@@ -7,6 +7,7 @@
 
 import {
   API_CONFIG,
+  TOKEN_CONFIG,
   DEFAULT_MODEL,
   getAnthropicApiKey,
   getApiHeaders,
@@ -347,7 +348,7 @@ class ClaudeClient {
       {
         ...options,
         system: systemPrompt,
-        maxTokens: 8192,
+        maxTokens: TOKEN_CONFIG.maxOutputTokens,
       }
     );
   }

@@ -260,7 +260,7 @@ describe('IntakeAnalyzer', () => {
 
         expect(result.success).toBe(true);
         expect(result.data?.model).toBe('fallback');
-        expect(result.data?.overallConfidence).toBe(0.1);
+        expect(result.data?.overallConfidence).toBe(0.2);
         expect(result.data?.warnings).toContain('AI analysis unavailable: ANTHROPIC_API_KEY not configured');
         expect(result.estimatedCost).toBe(0);
 

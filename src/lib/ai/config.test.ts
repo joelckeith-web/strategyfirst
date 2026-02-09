@@ -41,7 +41,7 @@ describe('Claude AI Configuration', () => {
 
     it('should have valid token configuration', () => {
       expect(TOKEN_CONFIG.maxInputTokens).toBe(200000);
-      expect(TOKEN_CONFIG.maxOutputTokens).toBe(8192);
+      expect(TOKEN_CONFIG.maxOutputTokens).toBe(16384);
       expect(TOKEN_CONFIG.charsPerToken).toBeGreaterThan(0);
     });
 

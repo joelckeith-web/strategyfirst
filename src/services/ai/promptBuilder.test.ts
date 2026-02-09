@@ -150,7 +150,7 @@ describe('PromptBuilder', () => {
     it('should include sitemap data when available', () => {
       const context = buildDataContext(mockAnalysisInput);
 
-      expect(context).toContain('Sitemap Analysis');
+      expect(context).toContain('Sitemap Data');
       expect(context).toContain(JSON.stringify(mockAnalysisInput.sitemap, null, 2));
     });
 
