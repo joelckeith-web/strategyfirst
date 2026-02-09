@@ -719,7 +719,7 @@ async function triggerApifyResearch(
         {
           // Use GBP coordinates if available for radius-based search
           centerCoordinates: gbpRes.success ? gbpRes.coordinates : undefined,
-          radiusKm: 32, // ~20 miles
+          radiusKm: 10, // ~6 miles — keep results within the client's city
           includeMapPack: true,
         }
       );

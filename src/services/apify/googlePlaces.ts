@@ -104,7 +104,7 @@ export async function searchGooglePlaces(
     const { items } = await client.callActor<GooglePlacesCrawlerInput, GooglePlacesResult>(
       PLACES_ACTOR_ID,
       input,
-      { waitForFinish: 600, memory: 8192 } // 10 minutes timeout, 8GB memory
+      { waitForFinish: 180, memory: 4096 } // 3 minutes timeout, 4GB memory (tight city search)
     );
 
     return {
@@ -184,24 +184,24 @@ export async function findCompetitors(
     radiusKm?: number;
   } = {}
 ): Promise<GooglePlacesOutput> {
-  // Default to 32km (~20 miles) radius
-  const radiusKm = options.radiusKm || 32;
+  // Default to 10km (~6 miles) — keeps results within the client's city
+  const radiusKm = options.radiusKm || 10;
 
   console.log(`Finding competitors for "${businessType}" in ${location} with ${radiusKm}km radius`);
 
   const searchOptions: SearchGooglePlacesOptions = {
     // Fetch extra to have enough after category filtering
     maxResults: Math.max(maxCompetitors + 5, 10),
-    maxReviews: 10,
-    maxImages: 3,
+    maxReviews: 3, // Just enough for response rate calculation
+    maxImages: 0,  // Skip images to speed up the crawl
   };
 
   // Add radius-based search if coordinates provided
   if (options.centerCoordinates) {
     searchOptions.centerCoordinates = options.centerCoordinates;
     searchOptions.radiusKm = radiusKm;
-    // Use zoom level 12 for city-level search with good coverage
-    searchOptions.zoom = 12;
+    // Zoom 14 = neighborhood level, keeps search tight to the area
+    searchOptions.zoom = 14;
   }
 
   const result = await searchGooglePlaces(businessType, location, searchOptions);
