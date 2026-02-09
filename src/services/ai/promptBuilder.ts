@@ -929,7 +929,7 @@ export function buildDataContext(input: AIAnalysisInput): string {
     context += '## Website Crawl Data (Enriched Pages)\n';
     context += '**Each page includes enriched data fields:**\n';
     context += '- `pageType`: Pre-categorized as service/blog/location/about/faq/contact/portfolio/other — verify against title and content\n';
-    context += '- `contentPreview`: First 1,500 chars of actual page text — use for tone/voice analysis, USP extraction, team info, credentials\n';
+    context += '- `contentPreview`: First 3,000 chars of actual page text — use for tone/voice analysis, USP extraction, team info, credentials\n';
     context += '- `headings`: H1 and H2 tags — assess content structure, keyword targeting, topical depth\n';
     context += '- `internalLinkCount` / `externalLinkCount`: Link counts — assess Hub+Spoke internal linking health\n';
     context += '- `schemaTypes`: Per-page schema.org types found — evaluate AEO compliance per page\n\n';

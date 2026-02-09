@@ -864,11 +864,11 @@ async function triggerApifyResearch(
         let pageDomain = '';
         try { pageDomain = new URL(input.website).hostname; } catch { /* ignore */ }
 
-        // Enrich pages — only run HTML parsing on first 50 pages to stay fast
-        const pages = crawlResult.pages.map((p, i) => {
+        // Enrich all pages with content preview and HTML-derived data
+        const pages = crawlResult.pages.map(p => {
           const pageTitle = p.title || '';
           const pageUrl = p.url;
-          const doHtmlParsing = i < 50 && !!p.html;
+          const hasHtml = !!p.html;
 
           return {
             url: pageUrl,
@@ -876,11 +876,11 @@ async function triggerApifyResearch(
             description: p.metadata?.description || '',
             estimatedWordCount: p.text ? Math.round(p.text.length / 5) : 0,
             pageType: categorizePageByTitleAndUrl(pageUrl, pageTitle),
-            contentPreview: p.text ? p.text.slice(0, 1500) : '',
-            headings: doHtmlParsing ? extractHeadings(p.html!) : { h1: [], h2: [] },
-            internalLinkCount: doHtmlParsing ? countLinks(p.html!, pageDomain).internal : 0,
-            externalLinkCount: doHtmlParsing ? countLinks(p.html!, pageDomain).external : 0,
-            schemaTypes: doHtmlParsing ? extractPageSchema(p.html!) : [],
+            contentPreview: p.text ? p.text.slice(0, 3000) : '',
+            headings: hasHtml ? extractHeadings(p.html!) : { h1: [], h2: [] },
+            internalLinkCount: hasHtml ? countLinks(p.html!, pageDomain).internal : 0,
+            externalLinkCount: hasHtml ? countLinks(p.html!, pageDomain).external : 0,
+            schemaTypes: hasHtml ? extractPageSchema(p.html!) : [],
           };
         });
 
