@@ -715,7 +715,7 @@ async function triggerApifyResearch(
       const competitorResult = await findCompetitorsEnhanced(
         competitorSearchQuery,
         location,
-        10, // Get more results initially for better filtering
+        5, // Top 5 competitors
         {
           // Use GBP coordinates if available for radius-based search
           centerCoordinates: gbpRes.success ? gbpRes.coordinates : undefined,

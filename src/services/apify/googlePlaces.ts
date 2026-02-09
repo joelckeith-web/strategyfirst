@@ -154,8 +154,8 @@ export async function findCompetitors(
   console.log(`Finding competitors for "${businessType}" in ${location} with ${radiusKm}km radius`);
 
   const searchOptions: SearchGooglePlacesOptions = {
-    // Fetch more results initially so we can sort and filter
-    maxResults: Math.max(maxCompetitors * 3, 15),
+    // Fetch a few extra to allow filtering out the user's own business
+    maxResults: Math.max(maxCompetitors + 3, 8),
     maxReviews: 10,
     maxImages: 3,
   };
