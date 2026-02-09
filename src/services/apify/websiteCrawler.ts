@@ -25,7 +25,7 @@ export interface CrawlWebsiteOutput {
  *
  * Performance options:
  * - lightweight: true = 25 pages, depth 3, cheerio - ~1-2min
- * - lightweight: false = 150 pages, depth 5, cheerio - ~3-8min
+ * - lightweight: false = 300 pages, depth 5, cheerio - ~5-15min
  *
  * Using cheerio (HTTP-based) for all crawls - 10-50x faster than Playwright.
  * Playwright only needed for heavy JS-rendered SPAs (rare for local businesses).
@@ -38,8 +38,8 @@ export async function crawlWebsite(
 
   // Lightweight mode for faster initial analysis
   const isLightweight = options.lightweight ?? false;
-  // Full mode crawls up to 150 pages for comprehensive site analysis
-  const maxPages = options.maxPages || (isLightweight ? 25 : 150);
+  // Full mode crawls up to 300 pages for comprehensive site analysis
+  const maxPages = options.maxPages || (isLightweight ? 25 : 300);
   const maxDepth = options.maxDepth || (isLightweight ? 3 : 5);
 
   // Use cheerio for ALL crawls - HTTP-based, extremely fast
@@ -49,8 +49,8 @@ export async function crawlWebsite(
   // Memory: 16GB for comprehensive crawling
   const memory = 16384;
 
-  // Timeout: 3 min for lightweight, 15 min for full (allow time for larger sites)
-  const timeout = isLightweight ? 180 : 900;
+  // Timeout: 3 min for lightweight, 20 min for full (allow time for larger sites)
+  const timeout = isLightweight ? 180 : 1200;
 
   // Build start URLs - include homepage plus important sitemap URLs
   const startUrls: { url: string }[] = [{ url }];

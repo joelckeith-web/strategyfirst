@@ -42,6 +42,8 @@ interface WebsiteCrawlData {
   schemaTypes: string[];
   description: string;
   title: string;
+  totalPages?: number;
+  pageLimitReached?: boolean;
 }
 
 interface SitemapData {
@@ -359,6 +361,8 @@ export default function ResearchResultsPage({
   const [hasTriggeredReanalysis, setHasTriggeredReanalysis] = useState(false);
   const [isCitationLoading, setIsCitationLoading] = useState(false);
   const [citationError, setCitationError] = useState<string | null>(null);
+  const [isFullScrapeLoading, setIsFullScrapeLoading] = useState(false);
+  const [fullScrapeError, setFullScrapeError] = useState<string | null>(null);
 
   const runAIAnalysis = useCallback(async () => {
     setIsAnalyzing(true);
@@ -426,6 +430,34 @@ export default function ResearchResultsPage({
       setIsCitationLoading(false);
     }
   }, [sessionId, sessionData]);
+
+  const runFullScrape = useCallback(async () => {
+    setIsFullScrapeLoading(true);
+    setFullScrapeError(null);
+
+    try {
+      const response = await fetch(`/api/research/${sessionId}/full-scrape`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to run full scrape');
+      }
+
+      // Refetch the session data to get updated results
+      const statusResponse = await fetch(`/api/research/status/${sessionId}`);
+      if (statusResponse.ok) {
+        const updatedData = await statusResponse.json();
+        setSessionData(updatedData);
+      }
+    } catch (err) {
+      setFullScrapeError(err instanceof Error ? err.message : 'Failed to run full scrape');
+    } finally {
+      setIsFullScrapeLoading(false);
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     async function fetchResults() {
@@ -1366,6 +1398,30 @@ export default function ResearchResultsPage({
                   </div>
                 </div>
               )}
+              {/* Page limit reached banner + Full Scrape button */}
+              {websiteCrawl.pageLimitReached && !isFullScrapeLoading && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-800">
+                    Showing first 300 of {websiteCrawl.totalPages || 300}+ pages. Run Full Scrape to analyze all pages.
+                  </p>
+                  <Button
+                    onClick={runFullScrape}
+                    disabled={isFullScrapeLoading}
+                    className="mt-3"
+                  >
+                    Full Scrape
+                  </Button>
+                  {fullScrapeError && (
+                    <p className="text-red-500 text-sm mt-2">{fullScrapeError}</p>
+                  )}
+                </div>
+              )}
+              {isFullScrapeLoading && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
+                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mb-2"></div>
+                  <p className="text-sm text-blue-800">Crawling all pages... This may take 5-15 minutes.</p>
+                </div>
+              )}
             </CardBody>
           </Card>
         )}
@@ -1382,6 +1438,7 @@ export default function ResearchResultsPage({
           const locationPageCount = aiWebsite?.locationPageCount?.value ?? sitemap.pageTypes?.locations ?? 0;
           const totalPages = aiWebsite?.pageCount?.value ?? sitemap.totalPages ?? 0;
           const isAiCategorized = !!aiWebsite;
+          const crawlLimitReached = websiteCrawl?.pageLimitReached ?? false;
 
           return (
             <Card>
@@ -1397,7 +1454,7 @@ export default function ResearchResultsPage({
               </CardHeader>
               <CardBody>
                 <div className="grid grid-cols-2 gap-4">
-                  <StatCard value={totalPages} label="Total Pages" icon="📄" />
+                  <StatCard value={crawlLimitReached ? `${totalPages}+` : totalPages} label={crawlLimitReached ? 'Pages (limited)' : 'Total Pages'} icon="📄" />
                   <StatCard value={servicePageCount || 0} label="Service Pages" icon="🔧" />
                   <StatCard value={blogPostCount || 0} label="Blog Posts" icon="📝" />
                   <StatCard value={locationPageCount || 0} label="Location Pages" icon="📍" />
@@ -1422,6 +1479,11 @@ export default function ResearchResultsPage({
                     </span>
                   </div>
                 </div>
+                {crawlLimitReached && (
+                  <p className="text-xs text-amber-600 mt-3 text-center">
+                    Page count limited to first 300 crawled pages. Use Full Scrape in Website Technical for complete data.
+                  </p>
+                )}
                 {isAiCategorized && (
                   <p className="text-xs text-gray-400 mt-3 text-center">
                     Page types categorized by AI analysis

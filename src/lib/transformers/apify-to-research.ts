@@ -95,7 +95,7 @@ export function transformWebsiteCrawlerToWebsiteData(
     schemaTypes: extractSchemaTypes(allHtml),
     description: firstPage?.description || null,
     title: firstPage?.title || null,
-    pages: inputs.slice(0, 150).map(page => ({
+    pages: inputs.slice(0, 300).map(page => ({
       url: page.url,
       title: page.title || '',
       wordCount: (page.text || '').split(/\s+/).filter(Boolean).length,
