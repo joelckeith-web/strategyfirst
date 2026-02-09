@@ -202,21 +202,37 @@ export default function ClientProfilePage({
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold text-gray-900">Client Information</h2>
             {!isEditing ? (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setEditForm({
-                    business_name: client.business_name,
-                    website_url: client.website_url,
-                    phone: client.phone,
-                    industry: client.industry,
-                    notes: client.notes,
-                  });
-                  setIsEditing(true);
-                }}
-              >
-                Edit
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditForm({
+                      business_name: client.business_name,
+                      website_url: client.website_url,
+                      phone: client.phone,
+                      industry: client.industry,
+                      notes: client.notes,
+                    });
+                    setIsEditing(true);
+                  }}
+                >
+                  Edit
+                </Button>
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Delete "${client.business_name}"? This will also delete all locations and unlink audit sessions.`)) return;
+                    try {
+                      const res = await fetch(API_ENDPOINTS.clientById(clientId), { method: 'DELETE' });
+                      if (res.ok) router.push('/clients');
+                    } catch (err) {
+                      console.error('Failed to delete client:', err);
+                    }
+                  }}
+                  className="px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
             ) : (
               <div className="flex gap-2">
                 <Button onClick={handleSaveEdit} disabled={isSaving}>
