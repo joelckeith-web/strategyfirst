@@ -43,7 +43,7 @@ export const API_CONFIG = {
 export const TOKEN_CONFIG = {
   // Model context limits
   maxInputTokens: 200000, // Sonnet/Opus support 200k context
-  maxOutputTokens: 16384, // Requested output limit - large enough for full JSON response
+  maxOutputTokens: 32768, // Requested output limit - Claude Sonnet 4 supports higher output
 
   // Estimation factors (rough approximations)
   charsPerToken: 4, // Average characters per token

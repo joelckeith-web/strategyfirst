@@ -262,7 +262,7 @@ describe('PromptBuilder', () => {
       const context = buildDataContext(mockAnalysisInput);
 
       expect(context).toContain('Output Reminder');
-      expect(context).toContain('valid JSON only');
+      expect(context).toContain('VALID JSON only');
     });
 
     it('should handle optional fields gracefully', () => {

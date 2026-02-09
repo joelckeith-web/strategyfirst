@@ -421,7 +421,7 @@ describe('ClaudeClient', () => {
       expect(callBody.system).toBe('You are an expert analyst.');
       expect(callBody.messages[0].role).toBe('user');
       expect(callBody.messages[0].content).toBe('Analyze this data...');
-      expect(callBody.max_tokens).toBe(16384);
+      expect(callBody.max_tokens).toBe(32768);
     });
 
     it('should use default temperature when not provided', async () => {

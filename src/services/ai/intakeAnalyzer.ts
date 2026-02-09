@@ -456,122 +456,200 @@ function createFallbackResult(input: AIAnalysisInput, error: string): AIAnalysis
 }
 
 /**
- * Parse and validate the AI response
+ * Strip markdown code fences from response text
+ */
+function stripMarkdownFences(text: string): string {
+  let cleaned = text.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.slice(7);
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.slice(3);
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.slice(0, -3);
+  }
+  return cleaned.trim();
+}
+
+/**
+ * Build an AIAnalysisResult from parsed categories and optional insights
+ */
+function buildResultFromParsed(
+  categories: Record<string, Record<string, unknown>>,
+  insights: Record<string, unknown> | null,
+  input: AIAnalysisInput,
+  dataQualityScore: number,
+  warnings: string[]
+): AIAnalysisResult {
+  const result: AIAnalysisResult = {
+    analyzedAt: new Date().toISOString(),
+    model: DEFAULT_MODEL,
+    sessionId: input.sessionId,
+    categories: {
+      businessContext: {
+        ...createDefaultBusinessContext(input),
+        ...categories.businessContext,
+      },
+      revenueServices: {
+        ...createDefaultRevenueServices(input),
+        ...categories.revenueServices,
+      },
+      localSEO: {
+        ...createDefaultLocalSEO(input),
+        ...categories.localSEO,
+      },
+      websiteReadiness: {
+        ...createDefaultWebsiteReadiness(input),
+        ...categories.websiteReadiness,
+      },
+      toneVoice: {
+        ...createDefaultToneVoice(),
+        ...categories.toneVoice,
+      },
+      conversionMeasurement: {
+        ...createDefaultConversionMeasurement(),
+        ...categories.conversionMeasurement,
+      },
+      aiConsiderations: {
+        ...createDefaultAIConsiderations(),
+        ...categories.aiConsiderations,
+      },
+    },
+    insights: {
+      ...createDefaultInsights(),
+      ...(insights || {}),
+    },
+    overallConfidence: 0,
+    fieldsAnalyzed: 68,
+    fieldsWithHighConfidence: 0,
+    fieldsWithLowConfidence: 0,
+    dataQualityScore,
+    tokenUsage: { input: 0, output: 0, total: 0 },
+    processingTimeMs: 0,
+    warnings,
+    errors: [],
+  };
+
+  // Calculate confidence metrics
+  const confidenceScores: number[] = [];
+  for (const category of Object.values(result.categories)) {
+    for (const field of Object.values(category)) {
+      if (field && typeof field === 'object' && 'confidence' in field) {
+        const conf = (field as InferredField<unknown>).confidence;
+        confidenceScores.push(conf);
+        if (conf >= ANALYSIS_CONFIG.highConfidenceThreshold) {
+          result.fieldsWithHighConfidence++;
+        } else if (conf <= ANALYSIS_CONFIG.lowConfidenceThreshold) {
+          result.fieldsWithLowConfidence++;
+        }
+      }
+    }
+  }
+
+  result.overallConfidence =
+    confidenceScores.length > 0
+      ? confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length
+      : 0.1;
+
+  return result;
+}
+
+/**
+ * Parse and validate the AI response.
+ * Uses a multi-stage approach:
+ *   1. Try full JSON parse
+ *   2. Try repair + full parse (for truncated responses)
+ *   3. Try partial extraction of categories + insights (for badly truncated responses)
  */
 function parseAIResponse(
   responseText: string,
   input: AIAnalysisInput
 ): AIAnalysisResult | null {
+  const jsonText = stripMarkdownFences(responseText);
+
+  // Stage 1: Try full JSON parse
   try {
-    // Try to extract JSON from the response
-    let jsonText = responseText.trim();
-
-    // Handle potential markdown code blocks
-    if (jsonText.startsWith('```json')) {
-      jsonText = jsonText.slice(7);
-    } else if (jsonText.startsWith('```')) {
-      jsonText = jsonText.slice(3);
-    }
-    if (jsonText.endsWith('```')) {
-      jsonText = jsonText.slice(0, -3);
-    }
-    jsonText = jsonText.trim();
-
     const parsed = JSON.parse(jsonText);
-
-    // Validate required structure
-    if (!parsed.categories) {
-      console.error('AI response missing categories');
-      return null;
+    if (parsed.categories) {
+      console.log('✅ Full JSON parse successful');
+      return buildResultFromParsed(
+        parsed.categories,
+        parsed.insights || null,
+        input,
+        parsed.dataQualityScore || 50,
+        parsed.warnings || []
+      );
     }
-
-    // Merge with defaults to ensure all fields exist
-    const result: AIAnalysisResult = {
-      analyzedAt: new Date().toISOString(),
-      model: DEFAULT_MODEL,
-      sessionId: input.sessionId,
-      categories: {
-        businessContext: {
-          ...createDefaultBusinessContext(input),
-          ...parsed.categories.businessContext,
-        },
-        revenueServices: {
-          ...createDefaultRevenueServices(input),
-          ...parsed.categories.revenueServices,
-        },
-        localSEO: {
-          ...createDefaultLocalSEO(input),
-          ...parsed.categories.localSEO,
-        },
-        websiteReadiness: {
-          ...createDefaultWebsiteReadiness(input),
-          ...parsed.categories.websiteReadiness,
-        },
-        toneVoice: {
-          ...createDefaultToneVoice(),
-          ...parsed.categories.toneVoice,
-        },
-        conversionMeasurement: {
-          ...createDefaultConversionMeasurement(),
-          ...parsed.categories.conversionMeasurement,
-        },
-        aiConsiderations: {
-          ...createDefaultAIConsiderations(),
-          ...parsed.categories.aiConsiderations,
-        },
-      },
-      insights: {
-        ...createDefaultInsights(),
-        ...parsed.insights,
-      },
-      overallConfidence: 0,
-      fieldsAnalyzed: 68,
-      fieldsWithHighConfidence: 0,
-      fieldsWithLowConfidence: 0,
-      dataQualityScore: parsed.dataQualityScore || 50,
-      tokenUsage: { input: 0, output: 0, total: 0 },
-      processingTimeMs: 0,
-      warnings: parsed.warnings || [],
-      errors: [],
-    };
-
-    // Calculate confidence metrics
-    const confidenceScores: number[] = [];
-    for (const category of Object.values(result.categories)) {
-      for (const field of Object.values(category)) {
-        if (field && typeof field === 'object' && 'confidence' in field) {
-          const conf = (field as InferredField<unknown>).confidence;
-          confidenceScores.push(conf);
-          if (conf >= ANALYSIS_CONFIG.highConfidenceThreshold) {
-            result.fieldsWithHighConfidence++;
-          } else if (conf <= ANALYSIS_CONFIG.lowConfidenceThreshold) {
-            result.fieldsWithLowConfidence++;
-          }
-        }
-      }
-    }
-
-    result.overallConfidence =
-      confidenceScores.length > 0
-        ? confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length
-        : 0.1;
-
-    return result;
-  } catch (error) {
-    console.error('Failed to parse AI response:', error);
-    console.error('Response text:', responseText.slice(0, 500));
-    return null;
+  } catch {
+    console.warn('Full JSON parse failed, trying repair...');
   }
+
+  // Stage 2: Try repair + full parse
+  try {
+    const repaired = repairTruncatedJson(jsonText);
+    const parsed = JSON.parse(repaired);
+    if (parsed.categories) {
+      console.log('✅ Repaired JSON parse successful');
+      return buildResultFromParsed(
+        parsed.categories,
+        parsed.insights || null,
+        input,
+        parsed.dataQualityScore || 50,
+        [...(parsed.warnings || []), 'Response was truncated and repaired — some insights may be incomplete']
+      );
+    }
+  } catch {
+    console.warn('Repaired JSON parse failed, trying partial extraction...');
+  }
+
+  // Stage 3: Extract categories and insights separately from raw text
+  const categories = extractCategoriesFromPartialJson(jsonText);
+  if (categories) {
+    const insights = extractInsightsFromPartialJson(jsonText);
+    console.log(`✅ Partial extraction successful: categories=${!!categories}, insights=${!!insights}`);
+    return buildResultFromParsed(
+      categories as Record<string, Record<string, unknown>>,
+      insights,
+      input,
+      40, // Lower data quality score for partial extraction
+      ['Response was truncated — categories extracted but some insights may use defaults']
+    );
+  }
+
+  console.error('❌ All parse attempts failed');
+  console.error('Response text (first 500):', jsonText.slice(0, 500));
+  console.error('Response text (last 500):', jsonText.slice(-500));
+  return null;
 }
 
 /**
  * Attempt to repair truncated JSON by closing unclosed braces/brackets
  */
 function repairTruncatedJson(text: string): string {
-  // Strip any trailing incomplete string value
-  let repaired = text.replace(/,\s*"[^"]*$/, '');
-  // Strip trailing incomplete key-value pair
-  repaired = repaired.replace(/,\s*"[^"]*"\s*:\s*[^,}\]]*$/, '');
+  let repaired = text;
+
+  // Strip trailing incomplete string (unclosed quote)
+  // Check if we're inside an unclosed string
+  let quoteCount = 0;
+  let esc = false;
+  for (const ch of repaired) {
+    if (esc) { esc = false; continue; }
+    if (ch === '\\') { esc = true; continue; }
+    if (ch === '"') quoteCount++;
+  }
+  if (quoteCount % 2 !== 0) {
+    // We're inside an unclosed string — truncate back to last complete string
+    const lastQuote = repaired.lastIndexOf('"');
+    if (lastQuote > 0) {
+      repaired = repaired.slice(0, lastQuote + 1);
+    }
+  }
+
+  // Strip trailing incomplete key-value patterns
+  repaired = repaired.replace(/,\s*"[^"]*"\s*:\s*$/, ''); // trailing "key":
+  repaired = repaired.replace(/,\s*"[^"]*"\s*:\s*"[^"]*$/, ''); // trailing "key": "incomplete
+  repaired = repaired.replace(/,\s*"[^"]*"\s*:\s*[^,}\]"]*$/, ''); // trailing "key": value
+  repaired = repaired.replace(/,\s*$/, ''); // trailing comma
 
   // Count unclosed braces and brackets
   let openBraces = 0;
@@ -605,6 +683,86 @@ function repairTruncatedJson(text: string): string {
   for (let i = 0; i < openBraces; i++) repaired += '}';
 
   return repaired;
+}
+
+/**
+ * Extract just the categories object from a (possibly truncated) JSON response.
+ * The categories section comes first in the output and is usually complete
+ * even when the response is truncated in the insights section.
+ */
+function extractCategoriesFromPartialJson(responseText: string): Record<string, unknown> | null {
+  try {
+    // Find the start of the categories object
+    const categoriesKeyIdx = responseText.indexOf('"categories"');
+    if (categoriesKeyIdx === -1) return null;
+
+    // Find the opening brace of the categories value
+    const colonIdx = responseText.indexOf(':', categoriesKeyIdx + 12);
+    if (colonIdx === -1) return null;
+    const braceStart = responseText.indexOf('{', colonIdx);
+    if (braceStart === -1) return null;
+
+    // Walk through to find the matching closing brace
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    let end = -1;
+
+    for (let i = braceStart; i < responseText.length; i++) {
+      const c = responseText[i];
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (c === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (c === '{') depth++;
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) { end = i; break; }
+      }
+    }
+
+    let categoriesJson: string;
+    if (end === -1) {
+      // Categories section itself is truncated — attempt repair
+      categoriesJson = repairTruncatedJson(responseText.slice(braceStart));
+    } else {
+      categoriesJson = responseText.slice(braceStart, end + 1);
+    }
+
+    const parsed = JSON.parse(categoriesJson);
+
+    // Validate it has at least some expected category keys
+    const expectedKeys = ['businessContext', 'revenueServices', 'localSEO', 'websiteReadiness'];
+    const hasCategories = expectedKeys.some(key => key in parsed);
+    if (!hasCategories) return null;
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract partial insights from a (possibly truncated) JSON response.
+ * Tries to get whatever insights are complete before truncation.
+ */
+function extractInsightsFromPartialJson(responseText: string): Record<string, unknown> | null {
+  try {
+    const insightsKeyIdx = responseText.indexOf('"insights"');
+    if (insightsKeyIdx === -1) return null;
+
+    const colonIdx = responseText.indexOf(':', insightsKeyIdx + 10);
+    if (colonIdx === -1) return null;
+    const braceStart = responseText.indexOf('{', colonIdx);
+    if (braceStart === -1) return null;
+
+    // Try to extract and repair the insights section
+    const insightsRaw = responseText.slice(braceStart);
+    const repaired = repairTruncatedJson(insightsRaw);
+    return JSON.parse(repaired);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -664,16 +822,14 @@ export async function analyzeIntakeData(input: AIAnalysisInput): Promise<Analyze
   }
 
   // Parse the response
-  console.log('Claude raw response length:', responseContent.length);
-  console.log('Claude stop_reason:', result.data.stopReason);
-  console.log('Claude response preview:', responseContent.slice(0, 500));
-  console.log('Claude response end:', responseContent.slice(-500));
+  console.log(`Claude response: ${responseContent.length} chars, stop_reason: ${result.data.stopReason}`);
 
   const analysisResult = parseAIResponse(responseContent, input);
 
   if (!analysisResult) {
-    console.error('Failed to parse Claude response');
-    console.error('Full response:', responseContent);
+    console.error('Failed to parse Claude response after all attempts');
+    console.error('Response preview:', responseContent.slice(0, 300));
+    console.error('Response end:', responseContent.slice(-300));
     return {
       success: true,
       data: createFallbackResult(input, 'Failed to parse AI response'),

@@ -306,6 +306,46 @@ Identify bigger opportunities requiring more investment:
 - Content hubs that would take 3-6 months to build
 - Market gaps no competitor is addressing well
 
+## CRITICAL: Output Size Constraints
+Your response MUST fit within the output token limit. Follow these constraints strictly:
+
+### Array Size Limits (ENFORCED)
+- competitorComparison.competitors: MAX 5 profiles
+- icpAnalysis.avatars: MAX 2 avatars (keep each avatar concise)
+- icpAnalysis.secondaryICPs: MAX 1
+- serpGapAnalysis.serpOpportunities: MAX 5
+- serpGapAnalysis.topicCoverageGaps: MAX 3
+- serpGapAnalysis.contentFreshnessGaps: MAX 2
+- serpGapAnalysis.technicalGaps: MAX 3
+- serpGapAnalysis.competitorWeaknessSummary: MAX 3
+- serpGapAnalysis.quickWinActions: MAX 5
+- serpGapAnalysis.longTermOpportunities: MAX 3
+- contentGaps: MAX 5
+- competitiveInsights: MAX 5
+- suggestedKeywords: MAX 8
+- quickWins: MAX 5
+- servicePageStrategy: MAX 5 (most important services only)
+- locationPageStrategy: MAX 3 (primary locations only)
+- priorityRecommendations: MAX 5
+- riskFactors: MAX 3
+- aeoStrategy.faqOpportunities: MAX 5
+- aeoStrategy.speakableContent: MAX 3
+- aeoStrategy.citableStatements: MAX 3
+- hubSpokeAnalysis.hubPages: MAX 3
+- hubSpokeAnalysis.spokePages: MAX 8
+- hubSpokeAnalysis.missingHubTopics: MAX 3
+
+### String Value Limits
+- "reasoning" fields: 1 short sentence (max 80 chars)
+- "action"/"recommendation"/"description" strings: 1-2 sentences max
+- Avatar fields: Keep concise — "backgroundStory" max 2 sentences, "dayInLife" max 1 sentence
+- Competitor "strengths"/"weaknesses" arrays: MAX 3 items each, short strings
+
+### Output Priority
+1. Output ALL categories fields FIRST (most critical — these drive confidence scores)
+2. Then output insights (abbreviate if needed)
+3. If approaching length limits, keep insight arrays shorter rather than omitting categories
+
 ## Response Structure
 {
   "categories": {
@@ -1145,9 +1185,10 @@ export function buildDataContext(input: AIAnalysisInput): string {
   context += '- Links to main content hubs\n\n';
 
   context += '## Output Reminder\n';
-  context += 'Respond with valid JSON only. Be SPECIFIC in all recommendations.\n';
-  context += 'Include word counts, exact URLs, exact title/meta tags.\n';
-  context += 'Score content against Hub+Spoke and AEO standards.\n';
+  context += 'Respond with VALID JSON only. No markdown, no explanation — just the JSON object.\n';
+  context += 'Be SPECIFIC but CONCISE in all recommendations.\n';
+  context += 'Respect all array size limits from the Output Size Constraints section.\n';
+  context += 'Output categories FIRST, then insights. Categories are the highest priority.\n';
 
   return context;
 }
