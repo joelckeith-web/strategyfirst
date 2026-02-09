@@ -134,8 +134,44 @@ export function calculateProminenceScore(rating: number, reviewCount: number): n
 }
 
 /**
+ * Check if a place's category is relevant to the target business type.
+ * Compares the place's categoryName against the search term using word overlap.
+ */
+function isCategoryRelevant(placeCategory: string | undefined, businessType: string): boolean {
+  if (!placeCategory) return false;
+
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+  const placeNorm = normalize(placeCategory);
+  const searchNorm = normalize(businessType);
+
+  // Exact match
+  if (placeNorm === searchNorm) return true;
+
+  // One contains the other (e.g., "home inspector" matches "home inspection service")
+  if (placeNorm.includes(searchNorm) || searchNorm.includes(placeNorm)) return true;
+
+  // Word overlap: at least one significant word in common
+  const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'in', 'of', 'for', 'to', 'by', 'service', 'services', 'company', 'llc', 'inc']);
+  const searchWords = searchNorm.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
+  const placeWords = placeNorm.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
+
+  for (const sw of searchWords) {
+    for (const pw of placeWords) {
+      // Match if words share a stem (e.g., "inspect" matches "inspector" and "inspection")
+      const shorter = sw.length <= pw.length ? sw : pw;
+      const longer = sw.length <= pw.length ? pw : sw;
+      if (shorter.length >= 4 && longer.startsWith(shorter.slice(0, Math.min(shorter.length, 6)))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Find competitors by searching for similar businesses
- * Enhanced version with 20-mile radius and prominence-based sorting
+ * Enhanced version with 20-mile radius, category filtering, and prominence-based sorting
  */
 export async function findCompetitors(
   businessType: string,
@@ -154,8 +190,8 @@ export async function findCompetitors(
   console.log(`Finding competitors for "${businessType}" in ${location} with ${radiusKm}km radius`);
 
   const searchOptions: SearchGooglePlacesOptions = {
-    // Fetch a few extra to allow filtering out the user's own business
-    maxResults: Math.max(maxCompetitors + 3, 8),
+    // Fetch extra to have enough after category filtering
+    maxResults: Math.max(maxCompetitors + 5, 10),
     maxReviews: 10,
     maxImages: 3,
   };
@@ -174,8 +210,21 @@ export async function findCompetitors(
     return result;
   }
 
+  // Filter to only places with a relevant category
+  const relevantPlaces = result.places.filter(place =>
+    isCategoryRelevant(place.categoryName, businessType)
+  );
+
+  console.log(`Category filter: ${result.places.length} total → ${relevantPlaces.length} relevant (looking for "${businessType}")`);
+  if (relevantPlaces.length === 0) {
+    console.log(`Categories found: ${result.places.map(p => p.categoryName).join(', ')}`);
+  }
+
+  // Use relevant places if we have enough, otherwise fall back to all results
+  const placesToRank = relevantPlaces.length >= 2 ? relevantPlaces : result.places;
+
   // Sort by prominence score (rating * sqrt(reviews))
-  const sortedPlaces = result.places
+  const sortedPlaces = placesToRank
     .map(place => ({
       ...place,
       prominenceScore: calculateProminenceScore(
@@ -186,7 +235,7 @@ export async function findCompetitors(
     .sort((a, b) => b.prominenceScore - a.prominenceScore)
     .slice(0, maxCompetitors);
 
-  console.log(`Found ${result.places.length} total, returning top ${sortedPlaces.length} by prominence`);
+  console.log(`Returning top ${sortedPlaces.length} by prominence`);
 
   return {
     success: true,
