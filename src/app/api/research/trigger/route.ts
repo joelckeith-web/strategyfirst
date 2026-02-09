@@ -470,6 +470,38 @@ async function triggerApifyResearch(
     errors.push({ step: 'sitemap', code: 'ERROR', message: sitemapRes.error || 'Unknown error' });
   }
 
+  // If GBP returned a category, update the client's industry if not already set
+  if (gbpRes.success && gbpRes.categoryName) {
+    try {
+      // Get client_id from the session
+      const { data: sessionRecord } = await supabaseAdmin
+        .from('research_sessions')
+        .select('client_id')
+        .eq('id', sessionId)
+        .single();
+
+      if (sessionRecord && (sessionRecord as { client_id: string | null }).client_id) {
+        const sessClientId = (sessionRecord as { client_id: string }).client_id;
+        // Only update if industry is currently null
+        const { data: clientRecord } = await supabaseAdmin
+          .from('clients')
+          .select('industry')
+          .eq('id', sessClientId)
+          .single();
+
+        if (clientRecord && !(clientRecord as { industry: string | null }).industry) {
+          await supabaseAdmin
+            .from('clients')
+            .update({ industry: gbpRes.categoryName } as never)
+            .eq('id', sessClientId);
+          console.log(`Updated client ${sessClientId} industry to "${gbpRes.categoryName}"`);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update client industry from GBP:', err);
+    }
+  }
+
   // Update progress after Phase 1
   await supabaseAdmin
     .from('research_sessions')

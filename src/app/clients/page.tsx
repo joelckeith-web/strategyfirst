@@ -29,6 +29,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<ClientData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchClients();
@@ -59,6 +60,22 @@ export default function ClientsPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  async function handleDeleteClient(e: React.MouseEvent, clientId: string, name: string) {
+    e.stopPropagation();
+    if (!confirm(`Delete "${name}"? This will also delete all locations and unlink audit sessions.`)) return;
+    setDeletingId(clientId);
+    try {
+      const res = await fetch(API_ENDPOINTS.clientById(clientId), { method: 'DELETE' });
+      if (res.ok) {
+        setClients((prev) => prev.filter((c) => c.id !== clientId));
+      }
+    } catch (err) {
+      console.error('Failed to delete client:', err);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -126,6 +143,7 @@ export default function ClientsPage() {
                     <th className="px-6 py-3 font-medium">Industry</th>
                     <th className="px-6 py-3 font-medium">Status</th>
                     <th className="px-6 py-3 font-medium">Last Updated</th>
+                    <th className="px-6 py-3 font-medium"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -148,9 +166,17 @@ export default function ClientsPage() {
                         {client.website_url}
                       </td>
                       <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {client.locations?.length || 0}
-                        </span>
+                        {client.locations && client.locations.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {client.locations.map((loc) => (
+                              <span key={loc.id} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {loc.city}, {loc.state}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">None</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {client.industry || '-'}
@@ -166,6 +192,15 @@ export default function ClientsPage() {
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {new Date(client.updated_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={(e) => handleDeleteClient(e, client.id, client.business_name)}
+                          disabled={deletingId === client.id}
+                          className="text-xs px-2.5 py-1 text-red-600 border border-red-200 rounded hover:bg-red-50 transition-colors disabled:opacity-50"
+                        >
+                          {deletingId === client.id ? 'Deleting...' : 'Delete'}
+                        </button>
                       </td>
                     </tr>
                   ))}
